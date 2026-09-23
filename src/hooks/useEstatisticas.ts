@@ -40,7 +40,7 @@ interface ViewUnidadeEquipeMicroRecord extends ViewRecord {
   microarea: number;
 }
 
-const CACHE_KEY = "amarcap53_views_v9";
+const CACHE_KEY = "amarcap53_views_v10";
 const CACHE_TTL = 30 * 60 * 1000; // 30 min
 
 interface CacheEntry {
@@ -75,22 +75,20 @@ function saveCache(data: CacheEntry): void {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Busca uma view com paginação + fields otimizado */
+/** Busca uma view com paginação automática */
 async function fetchView<T extends ViewRecord>(
   apiBase: string,
   headers: Record<string, string>,
   viewName: string,
-  fields?: string,
 ): Promise<T[]> {
   const all: T[] = [];
   let page = 1;
   const perPage = 300;
-  const fieldsParam = fields ? `&fields=${encodeURIComponent(fields)}` : "";
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const resp = await fetch(
-        `${apiBase}/api/collections/${viewName}/records?page=${page}&perPage=${perPage}${fieldsParam}`,
+        `${apiBase}/api/collections/${viewName}/records?page=${page}&perPage=${perPage}`,
         { headers, signal: AbortSignal.timeout(15000) },
       );
       if (resp.ok) {
@@ -127,14 +125,14 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
 
   // Buscar 8 views em paralelo
   const [eq, un, em, ceq, cun, cem, ue, uem] = await Promise.all([
-    fetchView<ViewEquipeRecord>(apiBase, headers, VIEW_TOTAL_EQUIPE, "id,equipe,total"),
-    fetchView<ViewUnidadeRecord>(apiBase, headers, VIEW_TOTAL_UNIDADE, "id,unidade,total"),
-    fetchView<ViewEquipeMicroRecord>(apiBase, headers, VIEW_TOTAL_EQUIPE_MICRO, "id,equipe,microarea,total"),
-    fetchView<ViewEquipeRecord>(apiBase, headers, VIEW_SEMCITO_EQUIPE, "id,equipe,total"),
-    fetchView<ViewUnidadeRecord>(apiBase, headers, VIEW_SEMCITO_UNIDADE, "id,unidade,total"),
-    fetchView<ViewEquipeMicroRecord>(apiBase, headers, VIEW_SEMCITO_EQUIPE_MICRO, "id,equipe,microarea,total"),
-    fetchView<ViewUnidadeEquipeRecord>(apiBase, headers, VIEW_TOTAL_UNIDADE_EQUIPE, "id,unidade,equipe,total"),
-    fetchView<ViewUnidadeEquipeMicroRecord>(apiBase, headers, VIEW_TOTAL_UNIDADE_EQUIPE_MICRO, "id,unidade,equipe,microarea,total"),
+    fetchView<ViewEquipeRecord>(apiBase, headers, VIEW_TOTAL_EQUIPE),
+    fetchView<ViewUnidadeRecord>(apiBase, headers, VIEW_TOTAL_UNIDADE),
+    fetchView<ViewEquipeMicroRecord>(apiBase, headers, VIEW_TOTAL_EQUIPE_MICRO),
+    fetchView<ViewEquipeRecord>(apiBase, headers, VIEW_SEMCITO_EQUIPE),
+    fetchView<ViewUnidadeRecord>(apiBase, headers, VIEW_SEMCITO_UNIDADE),
+    fetchView<ViewEquipeMicroRecord>(apiBase, headers, VIEW_SEMCITO_EQUIPE_MICRO),
+    fetchView<ViewUnidadeEquipeRecord>(apiBase, headers, VIEW_TOTAL_UNIDADE_EQUIPE),
+    fetchView<ViewUnidadeEquipeMicroRecord>(apiBase, headers, VIEW_TOTAL_UNIDADE_EQUIPE_MICRO),
   ]);
 
   // Mapear para formato BucketCount
