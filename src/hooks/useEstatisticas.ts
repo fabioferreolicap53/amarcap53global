@@ -113,27 +113,66 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
   const login = import.meta.env.VITE_POCKETBASE_LOGIN;
   const password = import.meta.env.VITE_POCKETBASE_PASSWORD;
 
-  // Auth
-  const authResp = await fetch(`${apiBase}/api/collections/_superusers/auth-with-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ identity: login, password }),
-  });
-  if (!authResp.ok) throw new Error(`Auth failed: ${authResp.status}`);
-  const { token } = (await authResp.json()) as { token: string };
+  // Auth com cache no localStorage
+  const AUTH_CACHE_KEY = "amarcap53_pb_auth";
+  let token = "";
+  try {
+    const cached = JSON.parse(localStorage.getItem(AUTH_CACHE_KEY) || "null");
+    if (cached?.token && cached?.expires && Date.now() < cached.expires) {
+      token = cached.token;
+    }
+  } catch { /* ignore */ }
+
+  if (!token) {
+    const authResp = await fetch(`${apiBase}/api/collections/_superusers/auth-with-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identity: login, password }),
+    });
+    if (!authResp.ok) throw new Error(`Auth failed: ${authResp.status}`);
+    const authData = await authResp.json() as { token: string };
+    token = authData.token;
+    try {
+      localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({ token, expires: Date.now() + 25 * 60 * 1000 }));
+    } catch { /* ignore */ }
+  }
   const headers = { Authorization: token };
 
-  // Buscar 8 views em paralelo
-  const [eq, un, em, ceq, cun, cem, ue, uem] = await Promise.all([
-    fetchView<ViewEquipeRecord>(apiBase, headers, VIEW_TOTAL_EQUIPE),
-    fetchView<ViewUnidadeRecord>(apiBase, headers, VIEW_TOTAL_UNIDADE),
-    fetchView<ViewEquipeMicroRecord>(apiBase, headers, VIEW_TOTAL_EQUIPE_MICRO),
-    fetchView<ViewEquipeRecord>(apiBase, headers, VIEW_SEMCITO_EQUIPE),
-    fetchView<ViewUnidadeRecord>(apiBase, headers, VIEW_SEMCITO_UNIDADE),
-    fetchView<ViewEquipeMicroRecord>(apiBase, headers, VIEW_SEMCITO_EQUIPE_MICRO),
-    fetchView<ViewUnidadeEquipeRecord>(apiBase, headers, VIEW_TOTAL_UNIDADE_EQUIPE),
-    fetchView<ViewUnidadeEquipeMicroRecord>(apiBase, headers, VIEW_TOTAL_UNIDADE_EQUIPE_MICRO),
-  ]);
+  // Buscar views com retry em auth
+  async function fetchAll(headers: Record<string, string>) {
+    return Promise.all([
+      fetchView<ViewEquipeRecord>(apiBase, headers, VIEW_TOTAL_EQUIPE),
+      fetchView<ViewUnidadeRecord>(apiBase, headers, VIEW_TOTAL_UNIDADE),
+      fetchView<ViewEquipeMicroRecord>(apiBase, headers, VIEW_TOTAL_EQUIPE_MICRO),
+      fetchView<ViewEquipeRecord>(apiBase, headers, VIEW_SEMCITO_EQUIPE),
+      fetchView<ViewUnidadeRecord>(apiBase, headers, VIEW_SEMCITO_UNIDADE),
+      fetchView<ViewEquipeMicroRecord>(apiBase, headers, VIEW_SEMCITO_EQUIPE_MICRO),
+      fetchView<ViewUnidadeEquipeRecord>(apiBase, headers, VIEW_TOTAL_UNIDADE_EQUIPE),
+      fetchView<ViewUnidadeEquipeMicroRecord>(apiBase, headers, VIEW_TOTAL_UNIDADE_EQUIPE_MICRO),
+    ]);
+  }
+
+  let result = await fetchAll(headers);
+
+  // Se primeira view retornou vazio, token pode ter expirado → re-auth
+  if (result[0].length === 0) {
+    try { localStorage.removeItem(AUTH_CACHE_KEY); } catch { /* ignore */ }
+    const authResp2 = await fetch(`${apiBase}/api/collections/_superusers/auth-with-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identity: login, password }),
+    });
+    if (authResp2.ok) {
+      const authData2 = await authResp2.json() as { token: string };
+      const headers2 = { Authorization: authData2.token };
+      try {
+        localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({ token: authData2.token, expires: Date.now() + 25 * 60 * 1000 }));
+      } catch { /* ignore */ }
+      result = await fetchAll(headers2);
+    }
+  }
+
+  const [eq, un, em, ceq, cun, cem, ue, uem] = result;
 
   // Mapear para formato BucketCount
   const total: EstatisticasData = {
