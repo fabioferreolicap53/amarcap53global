@@ -75,28 +75,36 @@ function saveCache(data: CacheEntry): void {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Busca uma view com retry */
+/** Busca uma view com paginação automática */
 async function fetchView<T extends ViewRecord>(
   apiBase: string,
   headers: Record<string, string>,
   viewName: string,
 ): Promise<T[]> {
+  const all: T[] = [];
+  let page = 1;
+  const perPage = 300;
+
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const resp = await fetch(
-        `${apiBase}/api/collections/${viewName}/records?perPage=500`,
-        { headers },
+        `${apiBase}/api/collections/${viewName}/records?page=${page}&perPage=${perPage}`,
+        { headers, signal: AbortSignal.timeout(15000) },
       );
       if (resp.ok) {
-        const data = await resp.json() as { items: T[] };
-        return data.items;
+        const data = await resp.json() as { items: T[]; totalItems: number };
+        all.push(...data.items);
+        if (all.length >= data.totalItems || data.items.length < perPage) return all;
+        page++;
+        attempt = 0; // reset retry para próxima página
+        continue;
       }
       if (attempt < 3) await sleep(500 * attempt);
     } catch {
       if (attempt < 3) await sleep(500 * attempt);
     }
   }
-  throw new Error(`View ${viewName} failed`);
+  return all; // retorna o que conseguiu
 }
 
 /** Busca todas as views de uma vez */
