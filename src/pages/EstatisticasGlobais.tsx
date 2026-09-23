@@ -71,7 +71,7 @@ export default function EstatisticasGlobais() {
       for (const [k, v] of Object.entries(totais)) {
         const parts = k.split("|");
         if (parts[0] === prefix && parts[1] === selEquipe && parts.length === 3) {
-          microList.push({ label: `${selEquipe} / Microárea ${parts[2]}`, count: v });
+          microList.push({ label: `${selEquipe} / Microárea ${parts[2]!}`, count: v });
           totalGeral += v;
         }
       }
@@ -88,7 +88,7 @@ export default function EstatisticasGlobais() {
     for (const [k, v] of Object.entries(totais)) {
       const parts = k.split("|");
       if (parts[0] === prefix && parts.length === 2) {
-        equipeMap.set(parts[1], v);
+        equipeMap.set(parts[1]!, v);
         totalGeral += v;
       }
     }
@@ -100,7 +100,7 @@ export default function EstatisticasGlobais() {
     for (const [k, v] of Object.entries(totais)) {
       const parts = k.split("|");
       if (parts[0] === prefix && parts.length === 3) {
-        microList.push({ label: `${parts[1]} / Microárea ${parts[2]}`, count: v });
+        microList.push({ label: `${parts[1]!} / Microárea ${parts[2]!}`, count: v });
       }
     }
     microList.sort((a, b) => b.count - a.count);

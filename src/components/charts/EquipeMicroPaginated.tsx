@@ -126,7 +126,7 @@ export default function EquipeMicroPaginated({ data }: Props) {
         equipe: group.equipe,
         total: group.total,
         microCount: group.micros.length,
-        option: buildOption(group, PALETTE[colorIdx]),
+        option: buildOption(group, PALETTE[colorIdx]!),
         color: PALETTE[colorIdx],
       };
     });

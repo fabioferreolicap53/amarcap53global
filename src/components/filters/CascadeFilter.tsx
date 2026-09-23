@@ -185,7 +185,7 @@ export default function CascadeFilter({
     }
     if (selectedUnidade) {
       return Object.entries(filterData.totais)
-        .filter(([k]) => k.startsWith(selectedUnidade + "|") && !k.includes("|", selectedUnidade.length + 1, selectedUnidade.length + 2))
+        .filter(([k]) => k.startsWith(selectedUnidade + "|") && k.split("|").length === 2)
         .reduce((s, [, v]) => s + v, 0);
     }
     return 0;

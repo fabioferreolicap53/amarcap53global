@@ -29,7 +29,7 @@ interface MicroNode {
   value: number;
   equipe: string;
   itemStyle?: { color: string; borderColor: string; borderWidth: number };
-  label?: { show: boolean; fontSize: number; color: string; fontFamily: string; formatter: string };
+  label?: { show: boolean; fontSize: number; color: string; fontFamily: string; fontWeight: string; textShadowColor: string; textShadowBlur: number; formatter: string };
 }
 
 /** Cores variadas dentro de uma equipe */
@@ -60,7 +60,6 @@ export default function EquipeMicroTreeMap({
     for (const item of data) {
       const parts = item.label.split(" / Microárea ");
       const equipe = parts[0]?.trim() || "Sem equipe";
-      const micro = parts[1]?.trim() || "?";
 
       if (!teamMap.has(equipe)) {
         teamMap.set(equipe, { name: equipe, value: 0, children: [] });
@@ -100,14 +99,14 @@ export default function EquipeMicroTreeMap({
     const result: TeamNode[] = [];
     teamOrder.forEach((equipe, teamIdx) => {
       const team = teamMap.get(equipe)!;
-      const baseColor = TEAM_COLORS[teamIdx % TEAM_COLORS.length];
+      const baseColor = TEAM_COLORS[teamIdx % TEAM_COLORS.length]!;
       const microPalette = microColors(baseColor);
 
       team.itemStyle = { color: baseColor };
       team.children = team.children.map((m, i) => ({
         ...m,
         itemStyle: {
-          color: microPalette[i % microPalette.length],
+          color: microPalette[i % microPalette.length]!,
           borderColor: "rgba(255,255,255,0.85)",
           borderWidth: 2,
         },
