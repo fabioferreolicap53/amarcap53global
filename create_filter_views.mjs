@@ -1,13 +1,15 @@
 const BASE = "https://centraldedados.dev.br";
 
+const DNA_HPV_FILTER = "(dna_hpv_pep != '' AND dna_hpv_pep IS NOT NULL) OR (dna_hpv_gal != '' AND dna_hpv_gal IS NOT NULL)";
+
 const views = [
   {
     name: "v_total_unidade_equipe",
-    query: "SELECT MIN(rowid) as id, unidade, equipe, count(*) as total FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' GROUP BY unidade, equipe ORDER BY total DESC"
+    query: `SELECT MIN(rowid) as id, unidade, equipe, count(*) as total FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' AND (${DNA_HPV_FILTER}) GROUP BY unidade, equipe ORDER BY total DESC`
   },
   {
     name: "v_total_unidade_equipe_micro",
-    query: "SELECT MIN(rowid) as id, unidade, equipe, microarea, count(*) as total FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' GROUP BY unidade, equipe, microarea ORDER BY total DESC"
+    query: `SELECT MIN(rowid) as id, unidade, equipe, microarea, count(*) as total FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' AND (${DNA_HPV_FILTER}) GROUP BY unidade, equipe, microarea ORDER BY total DESC`
   }
 ];
 
@@ -25,6 +27,12 @@ async function main() {
   const headers = { Authorization: token, "Content-Type": "application/json" };
 
   for (const view of views) {
+    // Deletar view existente se houver
+    try {
+      await fetch(`${BASE}/api/collections/${view.name}`, { method: "DELETE", headers });
+      console.log(`DELETED: ${view.name}`);
+    } catch { /* ignore */ }
+
     try {
       const body = JSON.stringify({
         name: view.name,

@@ -3,6 +3,9 @@
 
 $baseUrl = "https://centraldedados.dev.br"
 
+$DNA_HPV_FILTER = "(dna_hpv_pep != '' AND dna_hpv_pep IS NOT NULL) OR (dna_hpv_gal != '' AND dna_hpv_gal IS NOT NULL)"
+$SEM_CITO_FILTER = "(cito_lab = '' OR cito_lab IS NULL) AND (cito_pep = '' OR cito_pep IS NULL)"
+
 # Auth
 $authBody = '{"identity":"fabioferreoli@gmail.com","password":"@Ffo260480"}'
 $authResp = Invoke-RestMethod -Uri "$baseUrl/api/collections/_superusers/auth-with-password" -Method POST -ContentType "application/json" -Body $authBody

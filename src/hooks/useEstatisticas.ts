@@ -40,7 +40,7 @@ interface ViewUnidadeEquipeMicroRecord extends ViewRecord {
   microarea: number;
 }
 
-const CACHE_KEY = "amarcap53_views_v7";
+const CACHE_KEY = "amarcap53_views_v8";
 const CACHE_TTL = 10 * 60 * 1000;
 
 interface CacheEntry {

@@ -2,30 +2,35 @@ const BASE = "https://centraldedados.dev.br";
 
 // PocketBase views need: valid SQL, id column, and field definitions
 // ROW_NUMBER() not supported in PB view validation - use MIN(rowid) instead
+// Filtro DNA-HPV: registros com dna_hpv_pep ou dna_hpv_gal preenchidos
+const DNA_HPV_FILTER = "(dna_hpv_pep != '' AND dna_hpv_pep IS NOT NULL) OR (dna_hpv_gal != '' AND dna_hpv_gal IS NOT NULL)";
+// Filtro sem citopatologia: cito_lab e cito_pep vazios/nulos
+const SEM_CITO_FILTER = "(cito_lab = '' OR cito_lab IS NULL) AND (cito_pep = '' OR cito_pep IS NULL)";
+
 const views = [
   {
     name: "v_total_equipe",
-    query: "SELECT MIN(rowid) as id, equipe, count(*) as total FROM amarcap53_pacientes WHERE equipe != '' GROUP BY equipe ORDER BY total DESC"
+    query: `SELECT MIN(rowid) as id, equipe, count(*) as total FROM amarcap53_pacientes WHERE equipe != '' AND (${DNA_HPV_FILTER}) GROUP BY equipe ORDER BY total DESC`
   },
   {
     name: "v_total_unidade",
-    query: "SELECT MIN(rowid) as id, unidade, count(*) as total FROM amarcap53_pacientes WHERE unidade != '' GROUP BY unidade ORDER BY total DESC"
+    query: `SELECT MIN(rowid) as id, unidade, count(*) as total FROM amarcap53_pacientes WHERE unidade != '' AND (${DNA_HPV_FILTER}) GROUP BY unidade ORDER BY total DESC`
   },
   {
     name: "v_total_equipe_micro",
-    query: "SELECT MIN(rowid) as id, equipe, microarea, count(*) as total FROM amarcap53_pacientes WHERE equipe != '' GROUP BY equipe, microarea ORDER BY total DESC"
+    query: `SELECT MIN(rowid) as id, equipe, microarea, count(*) as total FROM amarcap53_pacientes WHERE equipe != '' AND (${DNA_HPV_FILTER}) GROUP BY equipe, microarea ORDER BY total DESC`
   },
   {
     name: "v_semcito_equipe",
-    query: "SELECT MIN(rowid) as id, equipe, count(*) as total FROM amarcap53_pacientes WHERE (cito_lab = '' OR cito_lab IS NULL) AND (cito_pep = '' OR cito_pep IS NULL) AND equipe != '' GROUP BY equipe ORDER BY total DESC"
+    query: `SELECT MIN(rowid) as id, equipe, count(*) as total FROM amarcap53_pacientes WHERE equipe != '' AND (${DNA_HPV_FILTER}) AND (${SEM_CITO_FILTER}) GROUP BY equipe ORDER BY total DESC`
   },
   {
     name: "v_semcito_unidade",
-    query: "SELECT MIN(rowid) as id, unidade, count(*) as total FROM amarcap53_pacientes WHERE (cito_lab = '' OR cito_lab IS NULL) AND (cito_pep = '' OR cito_pep IS NULL) AND unidade != '' GROUP BY unidade ORDER BY total DESC"
+    query: `SELECT MIN(rowid) as id, unidade, count(*) as total FROM amarcap53_pacientes WHERE unidade != '' AND (${DNA_HPV_FILTER}) AND (${SEM_CITO_FILTER}) GROUP BY unidade ORDER BY total DESC`
   },
   {
     name: "v_semcito_equipe_micro",
-    query: "SELECT MIN(rowid) as id, equipe, microarea, count(*) as total FROM amarcap53_pacientes WHERE (cito_lab = '' OR cito_lab IS NULL) AND (cito_pep = '' OR cito_pep IS NULL) AND equipe != '' GROUP BY equipe, microarea ORDER BY total DESC"
+    query: `SELECT MIN(rowid) as id, equipe, microarea, count(*) as total FROM amarcap53_pacientes WHERE equipe != '' AND (${DNA_HPV_FILTER}) AND (${SEM_CITO_FILTER}) GROUP BY equipe, microarea ORDER BY total DESC`
   }
 ];
 
@@ -44,6 +49,12 @@ async function main() {
   const headers = { Authorization: token, "Content-Type": "application/json" };
 
   for (const view of views) {
+    // Deletar view existente se houver
+    try {
+      await fetch(`${BASE}/api/collections/${view.name}`, { method: "DELETE", headers });
+      console.log(`DELETED: ${view.name}`);
+    } catch { /* ignore */ }
+
     try {
       const body = JSON.stringify({
         name: view.name,
