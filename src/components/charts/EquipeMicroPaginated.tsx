@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import ReactECharts from "echarts-for-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -111,6 +111,11 @@ function buildOption(group: EquipeGroup, color: string) {
 export default function EquipeMicroPaginated({ data }: Props) {
   const [page, setPage] = useState(0);
 
+  // Volta para a primeira página quando o conjunto de dados muda (troca de aba/filtro)
+  useEffect(() => {
+    setPage(0);
+  }, [data]);
+
   const equipes = useMemo(() => parseEquipes(data), [data]);
   const isSingleMode = equipes.length <= 1;
   const COLS = 3;
@@ -145,8 +150,8 @@ export default function EquipeMicroPaginated({ data }: Props) {
                 Equipe + Microárea
               </CardTitle>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {equipes.length} equipe{equipes.length !== 1 ? "s" : ""} \u2022 {data.length} combinação{data.length !== 1 ? "ões" : ""}
-                {!isSingleMode && " \u2022 6 por página"}
+                {equipes.length} equipe{equipes.length !== 1 ? "s" : ""} • {data.length} combinaç{data.length !== 1 ? "ões" : "ão"}
+                {!isSingleMode && " • 6 por página"}
               </p>
             </div>
           </div>
