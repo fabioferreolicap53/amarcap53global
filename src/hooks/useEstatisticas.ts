@@ -1,34 +1,23 @@
 import { useState, useEffect, useCallback } from "react";
 import type { BucketCount, EstatisticasData, FilterData } from "@/types/amarcap53";
 
-// Views no PocketBase. Só estas 3 são consultadas: as demais dimensões são
-// agregadas no cliente a partir delas. Cada view faz GROUP BY na tabela
-// inteira (129k linhas), então consultar menos views = carregamento viável.
-const VIEW_TOTAL_UE_MICRO = "v_total_unidade_equipe_micro";
-const VIEW_SEMCITO_EQ_MICRO = "v_semcito_equipe_micro";
-const VIEW_SEMCITO_UNIDADE = "v_semcito_unidade";
+// UMA única view consolidada: devolve `total` E `semcito` agrupados por
+// unidade+equipe+microárea. Todas as dimensões exibidas no frontend são
+// derivadas destas mesmas linhas no cliente — 1 request no lugar de 3.
+// A view é servida pelo covering index idx_am53_ue_micro_rast e a leitura
+// usa skipTotal=1 (evita o COUNT(*) duplicado que o PocketBase faria).
+const VIEW_CONSOLIDADO = "v_am53_consolidado";
 
-interface ViewRecord {
+interface ViewConsolidadoRecord {
   id: string;
+  unidade: string;
+  equipe: string;
+  microarea: number;
   total: number;
+  semcito: number;
 }
 
-interface ViewUnidadeEquipeMicroRecord extends ViewRecord {
-  unidade: string;
-  equipe: string;
-  microarea: number;
-}
-
-interface ViewEquipeMicroRecord extends ViewRecord {
-  equipe: string;
-  microarea: number;
-}
-
-interface ViewUnidadeRecord extends ViewRecord {
-  unidade: string;
-}
-
-const CACHE_KEY = "amarcap53_views_v12";
+const CACHE_KEY = "amarcap53_views_v13";
 const CACHE_TTL = 30 * 60 * 1000; // 30 min
 
 interface CacheEntry {
@@ -64,27 +53,29 @@ function saveCache(data: CacheEntry): void {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Busca uma view com paginação automática. Lança erro se não conseguir carregar nada. */
-async function fetchView<T extends ViewRecord>(
+async function fetchView<T extends { id: string }>(
   apiBase: string,
   headers: Record<string, string>,
   viewName: string,
 ): Promise<T[]> {
   const all: T[] = [];
-  const perPage = 1000; // PocketBase aceita; 1 request cobre todas as views
+  const perPage = 1000; // 1 request cobre a view inteira (656 linhas)
   let page = 1;
 
   for (;;) {
-    let data: { items: T[]; totalItems: number } | null = null;
+    let data: { items: T[] } | null = null;
 
     // 3 tentativas por página
     for (let attempt = 1; attempt <= 3 && !data; attempt++) {
       try {
+        // skipTotal=1: pula o COUNT(*) da view (que roda o GROUP BY 2×) —
+        // ~50% mais rápido. Página cheia => continua; página incompleta => fim.
         const resp = await fetch(
-          `${apiBase}/api/collections/${viewName}/records?page=${page}&perPage=${perPage}`,
+          `${apiBase}/api/collections/${viewName}/records?page=${page}&perPage=${perPage}&skipTotal=1`,
           { headers, signal: AbortSignal.timeout(45000) },
         );
         if (resp.ok) {
-          data = await resp.json() as { items: T[]; totalItems: number };
+          data = await resp.json() as { items: T[] };
         } else if (attempt < 3) {
           await sleep(500 * attempt);
         }
@@ -100,7 +91,7 @@ async function fetchView<T extends ViewRecord>(
     }
 
     all.push(...data.items);
-    if (all.length >= data.totalItems || data.items.length < perPage) return all;
+    if (data.items.length < perPage) return all;
     page++;
   }
 }
@@ -144,14 +135,8 @@ function toBuckets(map: Map<string, number>): BucketCount[] {
     .sort((a, b) => b.count - a.count);
 }
 
-interface ViewBundle {
-  uem: ViewUnidadeEquipeMicroRecord[];
-  cem: ViewEquipeMicroRecord[];
-  cun: ViewUnidadeRecord[];
-}
-
-/** Busca as views. Sequencial de propósito: em paralelo o SQLite entra em
- *  lock e o PocketBase responde 400 nas views mais pesadas. */
+/** Busca a view consolidada. Um único request devolve total + semcito por
+ *  unidade/equipe/microárea; todas as dimensões são derivadas destas linhas. */
 async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: EstatisticasData; filterData: FilterData }> {
   const apiBase = import.meta.env.VITE_POCKETBASE_URL;
   const login = import.meta.env.VITE_POCKETBASE_LOGIN;
@@ -171,34 +156,36 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
     cacheToken(token);
   }
 
-  async function load(t: string): Promise<ViewBundle> {
-    const headers = { Authorization: t };
-    const uem = await fetchView<ViewUnidadeEquipeMicroRecord>(apiBase, headers, VIEW_TOTAL_UE_MICRO);
-    const cem = await fetchView<ViewEquipeMicroRecord>(apiBase, headers, VIEW_SEMCITO_EQ_MICRO);
-    const cun = await fetchView<ViewUnidadeRecord>(apiBase, headers, VIEW_SEMCITO_UNIDADE);
-    return { uem, cem, cun };
+  const load = (t: string) =>
+    fetchView<ViewConsolidadoRecord>(apiBase, { Authorization: t }, VIEW_CONSOLIDADO);
+
+  let rows: ViewConsolidadoRecord[] = [];
+  try {
+    rows = await load(token);
+  } catch {
+    // token provavelmente expirado (401) — tenta re-auth abaixo
   }
 
-  let bundle = await load(token);
-
-  // Se a view principal voltou vazia, o token pode ter expirado → re-auth
-  if (bundle.uem.length === 0) {
+  // Se a view voltou vazia/erro, o token pode ter expirado → re-auth
+  if (rows.length === 0) {
     try { localStorage.removeItem(AUTH_CACHE_KEY); } catch { /* ignore */ }
     try {
       const token2 = await authRequest(apiBase, login, password);
       cacheToken(token2);
-      bundle = await load(token2);
+      rows = await load(token2);
     } catch {
-      // mantém o resultado parcial já obtido
+      // sem token válido: propaga para a UI (não cai no cache vazio)
+      throw new Error("Falha ao autenticar no servidor de dados");
     }
   }
 
-  const { uem, cem, cun } = bundle;
-
-  // ── TOTAL: todas as dimensões derivadas de v_total_unidade_equipe_micro ──
+  // ── Todas as dimensões derivam das MESMAS linhas ──
   const totalUnidade = new Map<string, number>();
   const totalEquipe = new Map<string, number>();
   const totalEqMicro = new Map<string, number>();
+  const citoUnidade = new Map<string, number>();
+  const citoEquipe = new Map<string, number>();
+  const citoEqMicro = new Map<string, number>();
 
   // filterData (cascata unidade → equipe → microárea)
   const unidadesSet = new Set<string>();
@@ -206,45 +193,43 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
   const microMap = new Map<string, Set<number>>();
   const totais: Record<string, number> = {};
 
-  for (const r of uem) {
+  let totalGeral = 0;
+  let semCitoGeral = 0;
+
+  for (const r of rows) {
     const u = r.unidade || "Não informado";
     const e = r.equipe || "Não informado";
+    const m = r.microarea;
+    const label = `${e} / Microárea ${m}`;
+
     addTo(totalUnidade, u, r.total);
     addTo(totalEquipe, e, r.total);
-    addTo(totalEqMicro, `${e} / Microárea ${r.microarea}`, r.total);
+    addTo(totalEqMicro, label, r.total);
+    addTo(citoUnidade, u, r.semcito);
+    addTo(citoEquipe, e, r.semcito);
+    addTo(citoEqMicro, label, r.semcito);
+    totalGeral += r.total;
+    semCitoGeral += r.semcito;
 
     unidadesSet.add(u);
     if (!equipesMap.has(u)) equipesMap.set(u, new Set());
     equipesMap.get(u)!.add(e);
     const key = `${u}|${e}`;
     if (!microMap.has(key)) microMap.set(key, new Set());
-    microMap.get(key)!.add(r.microarea);
+    microMap.get(key)!.add(m);
     totais[key] = (totais[key] ?? 0) + r.total;
-    totais[`${key}|${r.microarea}`] = r.total;
-  }
-
-  // ── SEM CITO ──
-  const citoEquipe = new Map<string, number>();
-  const citoEqMicro = new Map<string, number>();
-  for (const r of cem) {
-    const e = r.equipe || "Não informado";
-    addTo(citoEquipe, e, r.total);
-    addTo(citoEqMicro, `${e} / Microárea ${r.microarea}`, r.total);
-  }
-  const citoUnidade = new Map<string, number>();
-  for (const r of cun) {
-    addTo(citoUnidade, r.unidade || "Não informado", r.total);
+    totais[`${key}|${m}`] = r.total;
   }
 
   const total: EstatisticasData = {
-    totalGeral: uem.reduce((s, r) => s + r.total, 0),
+    totalGeral,
     porEquipe: toBuckets(totalEquipe),
     porUnidade: toBuckets(totalUnidade),
     porEquipeMicroarea: toBuckets(totalEqMicro),
   };
 
   const semCito: EstatisticasData = {
-    totalGeral: cem.reduce((s, r) => s + r.total, 0),
+    totalGeral: semCitoGeral,
     porEquipe: toBuckets(citoEquipe),
     porUnidade: toBuckets(citoUnidade),
     porEquipeMicroarea: toBuckets(citoEqMicro),

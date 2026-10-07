@@ -34,10 +34,11 @@ async function main() {
     "CREATE INDEX IF NOT EXISTS idx_am53_un_eq ON amarcap53_pacientes(unidade, equipe)",
     "CREATE INDEX IF NOT EXISTS idx_am53_dna_eq ON amarcap53_pacientes(equipe, dna_hpv_pep, dna_hpv_gal, cito_lab, cito_pep)",
     "CREATE INDEX IF NOT EXISTS idx_am53_dna_un ON amarcap53_pacientes(unidade, dna_hpv_pep, dna_hpv_gal, cito_lab, cito_pep)",
+    // Índice COBRE a view v_am53_consolidado: as colunas do GROUP BY vêm
+    // primeiro (elimina o sort temporário) e todos os campos filtrados/agregados
+    // estão no índice (covering — nenhuma leitura da tabela).
+    "CREATE INDEX IF NOT EXISTS idx_am53_ue_micro_rast ON amarcap53_pacientes(unidade, equipe, microarea, dna_hpv_pep, dna_hpv_gal, cito_lab, cito_pep)",
   ];
-
-  // Atualizar collection com índices
-  collection.indexes = indexes;
 
   const patchResp = await fetch(`${BASE}/api/collections/amarcap53_pacientes`, {
     method: "PATCH",
@@ -52,6 +53,23 @@ async function main() {
     const err = await patchResp.text();
     console.error("FAIL:", patchResp.status, err);
     process.exit(1);
+  }
+
+  // ── amarcap53_acompanhamentos ──
+  // idx_acomp_cns: cruzamento paciente <-> acompanhamento por CNS (texto),
+  // usado quando não há relação direta disponível.
+  const acompIndexes = [
+    "CREATE INDEX IF NOT EXISTS idx_am53_acomp_cns ON amarcap53_acompanhamentos(cns)",
+  ];
+  const patchAcomp = await fetch(`${BASE}/api/collections/amarcap53_acompanhamentos`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ indexes: acompIndexes })
+  });
+  if (patchAcomp.ok) {
+    console.log("OK: Índices de acompanhamentos aplicados");
+  } else {
+    console.error("FAIL acompanhamentos:", patchAcomp.status, await patchAcomp.text());
   }
 
   // Verificar

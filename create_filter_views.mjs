@@ -1,15 +1,17 @@
 const BASE = "https://centraldedados.dev.br";
 
 const DNA_HPV_FILTER = "(dna_hpv_pep != '' AND dna_hpv_pep IS NOT NULL) OR (dna_hpv_gal != '' AND dna_hpv_gal IS NOT NULL)";
+const SEM_CITO_FILTER = "(cito_lab = '' OR cito_lab IS NULL) AND (cito_pep = '' OR cito_pep IS NULL)";
 
+// v_am53_consolidado: UMA query devolve total E semcito agrupados por
+// unidade+equipe+microárea. Todas as dimensões do frontend (total/semCito
+// por unidade, equipe, equipe+microárea e o filtro em cascata) são derivadas
+// destas mesmas linhas — 1 request substitui as 3 views anteriores.
+// Colunas na ordem do covering index idx_am53_ue_micro_rast.
 const views = [
   {
-    name: "v_total_unidade_equipe",
-    query: `SELECT MIN(rowid) as id, unidade, equipe, count(*) as total FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' AND (${DNA_HPV_FILTER}) GROUP BY unidade, equipe ORDER BY total DESC`
-  },
-  {
-    name: "v_total_unidade_equipe_micro",
-    query: `SELECT MIN(rowid) as id, unidade, equipe, microarea, count(*) as total FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' AND (${DNA_HPV_FILTER}) GROUP BY unidade, equipe, microarea ORDER BY total DESC`
+    name: "v_am53_consolidado",
+    query: `SELECT MIN(rowid) as id, unidade, equipe, microarea, count(*) as total, SUM(CASE WHEN (${SEM_CITO_FILTER}) THEN 1 ELSE 0 END) as semcito FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' AND (${DNA_HPV_FILTER}) GROUP BY unidade, equipe, microarea ORDER BY total DESC`
   }
 ];
 
@@ -43,7 +45,8 @@ async function main() {
           { name: "unidade", type: "text" },
           { name: "equipe", type: "text" },
           { name: "microarea", type: "text" },
-          { name: "total", type: "number" }
+          { name: "total", type: "number" },
+          { name: "semcito", type: "number" }
         ]
       });
       const resp = await fetch(`${BASE}/api/collections`, {
