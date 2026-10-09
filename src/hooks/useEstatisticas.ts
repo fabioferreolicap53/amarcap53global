@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import type { BucketCount, EstatisticasData, EstatisticasTab, FilterData } from "@/types/amarcap53";
+import type { BucketCount, EstatisticasData, EstatisticasTab, FilterData, MetaRow } from "@/types/amarcap53";
 
 // UMA única view consolidada: devolve `total` E `semcito` agrupados por
 // unidade+equipe+microárea. Todas as dimensões exibidas no frontend são
@@ -17,15 +17,16 @@ interface ViewConsolidadoRecord {
   microarea: number;
   total: number;
   semcito: number;
+  alcancado: number;
 }
 
-const CACHE_KEY = "amarcap53_views_v14";
+const CACHE_KEY = "amarcap53_views_v15";
 const CACHE_TTL = 30 * 60 * 1000; // 30 min
 
 interface CacheEntry {
   total: EstatisticasData;
   semCito: EstatisticasData;
-  outubroRosa: EstatisticasData;
+  outubroRosaRows: MetaRow[];
   filterData: FilterData;
   timestamp: number;
 }
@@ -140,7 +141,7 @@ function toBuckets(map: Map<string, number>): BucketCount[] {
 
 /** Busca a view consolidada. Um único request devolve total + semcito por
  *  unidade/equipe/microárea; todas as dimensões são derivadas destas linhas. */
-async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: EstatisticasData; outubroRosa: EstatisticasData; filterData: FilterData }> {
+async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: EstatisticasData; outubroRosaRows: MetaRow[]; filterData: FilterData }> {
   const apiBase = import.meta.env.VITE_POCKETBASE_URL;
   const login = import.meta.env.VITE_POCKETBASE_LOGIN;
   const password = import.meta.env.VITE_POCKETBASE_PASSWORD;
@@ -235,8 +236,15 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
 
   const total = aggregate(rows, "total");
   const semCito = aggregate(rows, "semcito");
-  // Outubro Rosa: cópia do "Sem Cito", porém da view restrita a out/2026.
-  const outubroRosa = aggregate(octRows, "semcito");
+  // Outubro Rosa ("Gestão de lista"): mantém as linhas brutas para que a página
+  // agregue total/alcançado já respeitando o filtro em cascata.
+  const outubroRosaRows: MetaRow[] = octRows.map((r) => ({
+    unidade: r.unidade || "Não informado",
+    equipe: r.equipe || "Não informado",
+    microarea: r.microarea,
+    total: r.total,
+    alcancado: r.alcancado ?? 0,
+  }));
 
   const filterData: FilterData = {
     unidades: Array.from(unidadesSet).sort(),
@@ -249,7 +257,7 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
     totais,
   };
 
-  return { total, semCito, outubroRosa, filterData };
+  return { total, semCito, outubroRosaRows, filterData };
 }
 
 export function useEstatisticas() {
@@ -257,7 +265,7 @@ export function useEstatisticas() {
   const [error, setError] = useState<string | null>(null);
   const [totalStats, setTotalStats] = useState<EstatisticasData | null>(null);
   const [semCitoStats, setSemCitoStats] = useState<EstatisticasData | null>(null);
-  const [outubroRosaStats, setOutubroRosaStats] = useState<EstatisticasData | null>(null);
+  const [outubroRosaRows, setOutubroRosaRows] = useState<MetaRow[]>([]);
   const [filterData, setFilterData] = useState<FilterData | null>(null);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
@@ -269,7 +277,7 @@ export function useEstatisticas() {
       if (cached) {
         setTotalStats(cached.total);
         setSemCitoStats(cached.semCito);
-        setOutubroRosaStats(cached.outubroRosa);
+        setOutubroRosaRows(cached.outubroRosaRows);
         setFilterData(cached.filterData);
         setLoading(false);
         return;
@@ -277,12 +285,12 @@ export function useEstatisticas() {
     }
 
     try {
-      const { total, semCito, outubroRosa, filterData: fd } = await fetchAllViews();
+      const { total, semCito, outubroRosaRows: octRows, filterData: fd } = await fetchAllViews();
       setTotalStats(total);
       setSemCitoStats(semCito);
-      setOutubroRosaStats(outubroRosa);
+      setOutubroRosaRows(octRows);
       setFilterData(fd);
-      saveCache({ total, semCito, outubroRosa, filterData: fd, timestamp: Date.now() });
+      saveCache({ total, semCito, outubroRosaRows: octRows, filterData: fd, timestamp: Date.now() });
     } catch (err) {
       console.error("[useEstatisticas] Error:", err);
       setError(err instanceof Error ? err.message : "Erro ao carregar dados");
@@ -299,13 +307,13 @@ export function useEstatisticas() {
     (type: EstatisticasTab): EstatisticasData => {
       const empty: EstatisticasData = { totalGeral: 0, porEquipe: [], porUnidade: [], porEquipeMicroarea: [] };
       if (type === "total") return totalStats ?? empty;
-      if (type === "outubro_rosa") return outubroRosaStats ?? empty;
+      if (type === "outubro_rosa") return empty; // aba própria usa outubroRosaRows
       return semCitoStats ?? empty;
     },
-    [totalStats, semCitoStats, outubroRosaStats],
+    [totalStats, semCitoStats],
   );
 
   const emptyFilter: FilterData = { unidades: [], equipes: {}, microareas: {}, totais: {} };
 
-  return { loading, error, getStats, filterData: filterData ?? emptyFilter, refetch: () => fetchData(true) };
+  return { loading, error, getStats, outubroRosaRows, filterData: filterData ?? emptyFilter, refetch: () => fetchData(true) };
 }

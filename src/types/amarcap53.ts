@@ -47,6 +47,31 @@ export interface BucketCount {
   count: number;
 }
 
+/** Linha bruta da view "Gestão de lista" (Outubro Rosa): total da lista + alcançado. */
+export interface MetaRow {
+  unidade: string;
+  equipe: string;
+  microarea: number;
+  total: number;
+  alcancado: number;
+}
+
+/** Bucket agregado com total e alcançado (para gráficos empilhados). */
+export interface MetaBucket {
+  label: string;
+  total: number;
+  alcancado: number;
+}
+
+/** Dados agregados da aba Outubro Rosa 2026 ("Gestão de lista"). */
+export interface OutubroRosaData {
+  totalGeral: number;
+  alcancadoGeral: number;
+  porUnidade: MetaBucket[];
+  porEquipe: MetaBucket[];
+  porEquipeMicroarea: MetaBucket[];
+}
+
 export interface EstatisticasData {
   porEquipe: BucketCount[];
   porUnidade: BucketCount[];

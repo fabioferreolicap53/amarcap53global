@@ -2,6 +2,10 @@ const BASE = "https://centraldedados.dev.br";
 
 const DNA_HPV_FILTER = "(dna_hpv_pep != '' AND dna_hpv_pep IS NOT NULL) OR (dna_hpv_gal != '' AND dna_hpv_gal IS NOT NULL)";
 const SEM_CITO_FILTER = "(cito_lab = '' OR cito_lab IS NULL) AND (cito_pep = '' OR cito_pep IS NULL)";
+// Out/2026 "Gestão de lista": universo = 3 colunas em branco (cito_lab, cito_pep, dna_hpv_gal)
+// OU dna_hpv_gal preenchida em out/2026. As duas condições são disjuntas
+// (gal em branco vs. gal preenchida) → total = count(*) do grupo.
+const BLANK_3_FILTER = "(cito_lab = '' OR cito_lab IS NULL) AND (cito_pep = '' OR cito_pep IS NULL) AND (dna_hpv_gal = '' OR dna_hpv_gal IS NULL)";
 
 // v_am53_consolidado: UMA query devolve total E semcito agrupados por
 // unidade+equipe+microárea. Todas as dimensões do frontend (total/semCito
@@ -11,15 +15,28 @@ const SEM_CITO_FILTER = "(cito_lab = '' OR cito_lab IS NULL) AND (cito_pep = '' 
 // Filtro Outubro Rosa 2026: apenas registros cujo dna_hpv_gal cai em out/2026.
 const OUTUBRO_2026_FILTER = "dna_hpv_gal >= '2026-10-01' AND dna_hpv_gal < '2026-11-01'";
 
+const BASE_FIELDS = [
+  { name: "id", type: "text", required: true, primaryKey: true },
+  { name: "unidade", type: "text" },
+  { name: "equipe", type: "text" },
+  { name: "microarea", type: "text" },
+  { name: "total", type: "number" }
+];
+
 const views = [
   {
     name: "v_am53_consolidado",
+    fields: [...BASE_FIELDS, { name: "semcito", type: "number" }],
     query: `SELECT MIN(rowid) as id, unidade, equipe, microarea, count(*) as total, SUM(CASE WHEN (${SEM_CITO_FILTER}) THEN 1 ELSE 0 END) as semcito FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' AND (${DNA_HPV_FILTER}) GROUP BY unidade, equipe, microarea ORDER BY total DESC`
   },
   {
-    // Mesma estrutura do consolidado, porém restrito ao dna_hpv_gal de outubro/2026.
+    // Outubro Rosa 2026 — "Gestão de lista":
+    //   total    = registros com cito_lab, cito_pep e dna_hpv_gal em branco
+    //              + registros com dna_hpv_gal em out/2026 (condições disjuntas)
+    //   alcancado = cito_lab e cito_pep em branco E dna_hpv_gal em out/2026
     name: "v_am53_outubro_rosa",
-    query: `SELECT MIN(rowid) as id, unidade, equipe, microarea, count(*) as total, SUM(CASE WHEN (${SEM_CITO_FILTER}) THEN 1 ELSE 0 END) as semcito FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' AND (${DNA_HPV_FILTER}) AND (${OUTUBRO_2026_FILTER}) GROUP BY unidade, equipe, microarea ORDER BY total DESC`
+    fields: [...BASE_FIELDS, { name: "alcancado", type: "number" }],
+    query: `SELECT MIN(rowid) as id, unidade, equipe, microarea, count(*) as total, SUM(CASE WHEN (${SEM_CITO_FILTER}) AND (${OUTUBRO_2026_FILTER}) THEN 1 ELSE 0 END) as alcancado FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' AND ((${BLANK_3_FILTER}) OR (${OUTUBRO_2026_FILTER})) GROUP BY unidade, equipe, microarea ORDER BY total DESC`
   }
 ];
 
@@ -48,14 +65,7 @@ async function main() {
         name: view.name,
         type: "view",
         viewQuery: view.query,
-        fields: [
-          { name: "id", type: "text", required: true, primaryKey: true },
-          { name: "unidade", type: "text" },
-          { name: "equipe", type: "text" },
-          { name: "microarea", type: "text" },
-          { name: "total", type: "number" },
-          { name: "semcito", type: "number" }
-        ]
+        fields: view.fields
       });
       const resp = await fetch(`${BASE}/api/collections`, {
         method: "POST",

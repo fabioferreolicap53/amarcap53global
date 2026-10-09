@@ -3,6 +3,7 @@ import Header from "@/components/layout/Header";
 import SummaryCard from "@/components/charts/SummaryCard";
 import ExpandableBarChart from "@/components/charts/ExpandableBarChart";
 import EquipeMicroPaginated from "@/components/charts/EquipeMicroPaginated";
+import OutubroRosaPanel from "@/components/charts/OutubroRosaPanel";
 import CascadeFilter from "@/components/filters/CascadeFilter";
 import { useEstatisticas } from "@/hooks/useEstatisticas";
 import {
@@ -37,12 +38,13 @@ const TABS: { key: EstatisticasTab; label: string; description: string }[] = [
 ];
 
 export default function EstatisticasGlobais() {
-  const { loading, error, getStats, filterData, refetch } = useEstatisticas();
+  const { loading, error, getStats, outubroRosaRows, filterData, refetch } = useEstatisticas();
   const [activeTab, setActiveTab] = useState<EstatisticasTab>("outubro_rosa");
   const [selUnidade, setSelUnidade] = useState<string | null>(null);
   const [selEquipe, setSelEquipe] = useState<string | null>(null);
   const [selMicroarea, setSelMicroarea] = useState<number | null>(null);
 
+  const isOutubro = activeTab === "outubro_rosa";
   const rawStats = getStats(activeTab);
   const tabLabel = TABS.find((t) => t.key === activeTab)?.label ?? "";
 
@@ -235,8 +237,18 @@ export default function EstatisticasGlobais() {
           </div>
         )}
 
+        {/* ── Outubro Rosa 2026 — Gestão de lista (gráficos empilhados) ── */}
+        {!loading && isOutubro && (
+          <OutubroRosaPanel
+            rows={outubroRosaRows}
+            selUnidade={selUnidade}
+            selEquipe={selEquipe}
+            selMicroarea={selMicroarea}
+          />
+        )}
+
         {/* ── Summary Cards ── */}
-        {!loading && (
+        {!loading && !isOutubro && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <SummaryCard
               title="Total DNA-HPV"
@@ -269,7 +281,7 @@ export default function EstatisticasGlobais() {
         )}
 
         {/* ── Charts Grid ── */}
-        {!loading && (
+        {!loading && !isOutubro && (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <ExpandableBarChart
               title="Testes DNA-HPV por Unidade"
@@ -288,7 +300,7 @@ export default function EstatisticasGlobais() {
           </div>
         )}
 
-        {!loading && (
+        {!loading && !isOutubro && (
           <EquipeMicroPaginated
             data={stats.porEquipeMicroarea}
           />
