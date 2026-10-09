@@ -15,6 +15,10 @@ import {
   RefreshCw,
   Ribbon,
   Database,
+  Lock,
+  Unlock,
+  Check,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -39,6 +43,7 @@ const TABS: { key: EstatisticasTab; label: string; description: string }[] = [
 ];
 
 const LAST_UPDATE_KEY = "amarcap53_last_update";
+const DB_EDIT_PASSWORD = "dapsmulher";
 
 export default function EstatisticasGlobais() {
   const { loading, error, getStats, outubroRosaRows, filterData, refetch } = useEstatisticas();
@@ -62,6 +67,29 @@ export default function EstatisticasGlobais() {
     } catch {
       /* ignore */
     }
+  };
+
+  // ── Proteção por senha para inserir/alterar a data ──
+  const [unlocked, setUnlocked] = useState(false);
+  const [showPwd, setShowPwd] = useState(false);
+  const [pwd, setPwd] = useState("");
+  const [pwdError, setPwdError] = useState(false);
+
+  const submitDbPassword = () => {
+    if (pwd === DB_EDIT_PASSWORD) {
+      setUnlocked(true);
+      setShowPwd(false);
+      setPwd("");
+      setPwdError(false);
+    } else {
+      setPwdError(true);
+    }
+  };
+
+  const cancelDbPassword = () => {
+    setShowPwd(false);
+    setPwd("");
+    setPwdError(false);
   };
 
   const updateHint = useMemo(() => {
@@ -195,25 +223,102 @@ export default function EstatisticasGlobais() {
                 >
                   Última atualização do banco
                 </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="db-last-update"
-                    type="date"
-                    value={lastUpdate}
-                    onChange={(e) => handleLastUpdate(e.target.value)}
-                    className="w-[9.5rem] cursor-pointer rounded-md bg-transparent text-sm font-semibold text-navy outline-none [color-scheme:light] focus-visible:ring-2 focus-visible:ring-navy-200"
-                  />
-                  {updateHint && (
-                    <span
+
+                {showPwd && !unlocked ? (
+                  <div className="flex items-center gap-1.5">
+                    <Lock className="h-3.5 w-3.5 shrink-0 text-navy/50" />
+                    <input
+                      type="password"
+                      autoFocus
+                      value={pwd}
+                      onChange={(e) => {
+                        setPwd(e.target.value);
+                        setPwdError(false);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitDbPassword();
+                        if (e.key === "Escape") cancelDbPassword();
+                      }}
+                      placeholder="Senha"
                       className={cn(
-                        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-sm",
-                        updateHint.className,
+                        "w-[7.5rem] rounded-md border bg-white/80 px-2 py-0.5 text-xs font-semibold text-navy outline-none transition-colors focus:ring-2",
+                        pwdError
+                          ? "border-rose-300 ring-1 ring-rose-200"
+                          : "border-navy-200 focus:ring-navy-200",
+                      )}
+                    />
+                    <button
+                      type="button"
+                      onClick={submitDbPassword}
+                      title="Confirmar"
+                      className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500 text-white shadow-sm transition-colors hover:bg-emerald-600"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelDbPassword}
+                      title="Cancelar"
+                      className="flex h-6 w-6 items-center justify-center rounded-md bg-navy-100 text-navy transition-colors hover:bg-navy-200"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="db-last-update"
+                      type="date"
+                      value={lastUpdate}
+                      disabled={!unlocked}
+                      onChange={(e) => handleLastUpdate(e.target.value)}
+                      className={cn(
+                        "w-[9.5rem] rounded-md bg-transparent text-sm font-semibold text-navy outline-none [color-scheme:light] focus-visible:ring-2 focus-visible:ring-navy-200",
+                        unlocked ? "cursor-pointer" : "cursor-not-allowed opacity-55",
+                      )}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (unlocked) {
+                          setUnlocked(false);
+                          setShowPwd(false);
+                          setPwd("");
+                          setPwdError(false);
+                        } else {
+                          setShowPwd(true);
+                        }
+                      }}
+                      title={unlocked ? "Bloquear edição" : "Inserir senha para editar"}
+                      className={cn(
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors",
+                        unlocked
+                          ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                          : "bg-navy-100 text-navy/70 hover:bg-navy-200",
                       )}
                     >
-                      {updateHint.text}
-                    </span>
-                  )}
-                </div>
+                      {unlocked ? (
+                        <Unlock className="h-3.5 w-3.5" />
+                      ) : (
+                        <Lock className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                    {updateHint && (
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-sm",
+                          updateHint.className,
+                        )}
+                      >
+                        {updateHint.text}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {pwdError && (
+                  <p className="mt-0.5 text-[9px] font-semibold text-rose-600">Senha incorreta</p>
+                )}
               </div>
             </div>
 
