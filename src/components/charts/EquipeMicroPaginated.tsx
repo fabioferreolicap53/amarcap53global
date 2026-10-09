@@ -21,6 +21,9 @@ const PALETTE = [
   "#ea580c", "#ca8a04", "#0d9488", "#9333ea", "#c2410c",
 ];
 
+// Meta por microárea — linha tracejada em todos os gráficos do bloco.
+const META = 12;
+
 function parseEquipes(data: BucketCount[]): EquipeGroup[] {
   const map = new Map<string, EquipeGroup>();
   for (const item of data) {
@@ -44,9 +47,13 @@ function parseEquipes(data: BucketCount[]): EquipeGroup[] {
 
 function buildOption(group: EquipeGroup, color: string) {
   const micros = group.micros.slice(0, 25);
+  // Escala sempre deixa folga até a meta (senão a linha sai do gráfico).
+  const maxCount = micros.reduce((m, x) => Math.max(m, x.count), 0);
+  const xMax = Math.ceil(Math.max(maxCount, META) * 1.2);
+
   return {
     grid: { left: 4, right: 36, top: 4, bottom: 4, containLabel: true },
-    xAxis: { type: "value" as const, show: false },
+    xAxis: { type: "value" as const, show: false, max: xMax },
     yAxis: {
       type: "category" as const,
       data: micros.map((m) => `M.${m.micro}`),
@@ -88,6 +95,31 @@ function buildOption(group: EquipeGroup, color: string) {
           fontWeight: "bold" as const,
           color: "#475569",
           formatter: (p: { value: number }) => p.value.toLocaleString("pt-BR"),
+        },
+        markLine: {
+          silent: true,
+          symbol: "none",
+          animation: true,
+          animationDuration: 700,
+          lineStyle: {
+            color: "#e11d48",
+            type: "dashed" as const,
+            width: 2,
+          },
+          label: {
+            show: true,
+            position: "insideEndTop" as const,
+            formatter: `META ${META}`,
+            fontFamily: "Inter",
+            fontWeight: "bold" as const,
+            fontSize: 10,
+            color: "#fff",
+            backgroundColor: "#e11d48",
+            borderRadius: 4,
+            padding: [3, 6],
+            distance: 2,
+          },
+          data: [{ xAxis: META }],
         },
         animationDuration: 500,
         animationEasing: "cubicOut" as const,
@@ -155,31 +187,38 @@ export default function EquipeMicroPaginated({ data }: Props) {
               </p>
             </div>
           </div>
-          {totalPages > 1 && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="h-8 w-8 p-0 border-navy-200 text-navy hover:bg-navy-50"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm font-medium text-navy tabular-nums">
-                {page + 1} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="h-8 w-8 p-0 border-navy-200 text-navy hover:bg-navy-50"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {/* Badge da meta */}
+            <span className="flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600 shadow-sm">
+              <span className="h-3.5 w-0 border-l-2 border-dashed border-rose-500" />
+              Meta {META} por microárea
+            </span>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="h-8 w-8 p-0 border-navy-200 text-navy hover:bg-navy-50"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm font-medium text-navy tabular-nums">
+                  {page + 1} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="h-8 w-8 p-0 border-navy-200 text-navy hover:bg-navy-50"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </CardHeader>
 
