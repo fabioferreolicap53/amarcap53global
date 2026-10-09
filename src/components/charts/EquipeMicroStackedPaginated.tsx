@@ -54,10 +54,10 @@ function parseEquipes(data: MetaBucket[]): EquipeGroup[] {
 function buildOption(group: EquipeGroup, color: string) {
   const micros = group.micros.slice(0, 25);
   const maxTotal = micros.reduce((m, x) => Math.max(m, x.total), 0);
-  const xMax = Math.ceil(Math.max(maxTotal, 1) * 1.18);
+  const xMax = Math.ceil(Math.max(maxTotal * 1.18, 18));
 
   return {
-    grid: { left: 4, right: 44, top: 4, bottom: 4, containLabel: true },
+    grid: { left: 4, right: 44, top: 18, bottom: 16, containLabel: true },
     xAxis: { type: "value" as const, show: false, max: xMax },
     yAxis: {
       type: "category" as const,
@@ -107,6 +107,82 @@ function buildOption(group: EquipeGroup, color: string) {
           textShadowBlur: 8,
           textShadowColor: "rgba(255,255,255,0.65)",
           formatter: (p: { value: number }) => (p.value > 0 ? p.value.toLocaleString("pt-BR") : ""),
+        },
+        markLine: {
+          silent: false,
+          symbol: ["none", "none"] as ["none", "none"],
+          animationDuration: 900,
+          lineStyle: { type: "dashed" as const, width: 2 },
+          data: [
+            {
+              xAxis: 12,
+              name: "BOM",
+              lineStyle: {
+                color: "#2dd4bf",
+                shadowBlur: 8,
+                shadowColor: "rgba(45,212,191,0.55)",
+              },
+              label: {
+                show: true,
+                position: "end" as const,
+                align: "center" as const,
+                verticalAlign: "middle" as const,
+                formatter: "{v|12}\n{g|BOM}",
+                backgroundColor: "rgba(240,253,250,0.95)",
+                padding: [2, 6] as [number, number],
+                borderRadius: 8,
+                borderColor: "rgba(45,212,191,0.6)",
+                borderWidth: 1,
+                shadowBlur: 8,
+                shadowColor: "rgba(45,212,191,0.35)",
+                shadowOffsetY: 1,
+                rich: {
+                  v: { fontSize: 12, fontWeight: "bold" as const, color: "#0f766e", lineHeight: 13 },
+                  g: {
+                    fontSize: 7,
+                    fontWeight: "bold" as const,
+                    color: "#14b8a6",
+                    lineHeight: 9,
+                    letterSpacing: 1,
+                  },
+                },
+              },
+            },
+            {
+              xAxis: 16,
+              name: "EXCELENTE",
+              lineStyle: {
+                color: "#0d9488",
+                shadowBlur: 8,
+                shadowColor: "rgba(13,148,136,0.55)",
+              },
+              label: {
+                show: true,
+                position: "start" as const,
+                align: "center" as const,
+                verticalAlign: "middle" as const,
+                formatter: "{v|16}\n{g|EXC.}",
+                backgroundColor: "rgba(240,253,250,0.95)",
+                padding: [2, 6] as [number, number],
+                borderRadius: 8,
+                borderColor: "rgba(13,148,136,0.65)",
+                borderWidth: 1,
+                shadowBlur: 8,
+                shadowColor: "rgba(13,148,136,0.35)",
+                shadowOffsetY: 1,
+                rich: {
+                  v: { fontSize: 12, fontWeight: "bold" as const, color: "#115e59", lineHeight: 13 },
+                  g: {
+                    fontSize: 7,
+                    fontWeight: "bold" as const,
+                    color: "#0d9488",
+                    lineHeight: 9,
+                    letterSpacing: 1,
+                  },
+                },
+              },
+            },
+          ],
         },
         data: micros.map((m) => m.alcancado),
         animationDuration: 600,
@@ -226,6 +302,17 @@ export default function EquipeMicroStackedPaginated({ data }: Props) {
                 {data.length !== 1 ? "ões" : "ão"}
                 {!isSingleMode && ` • ${itemsPerPage} por página`}
               </p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wide text-teal-700">
+                  Meta Outubro Rosa
+                </span>
+                <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-bold text-teal-700 ring-1 ring-teal-200 shadow-sm shadow-teal-100">
+                  12 = BOM
+                </span>
+                <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-bold text-teal-800 ring-1 ring-teal-300 shadow-sm shadow-teal-200">
+                  16 = EXCELENTE
+                </span>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -276,7 +363,7 @@ export default function EquipeMicroStackedPaginated({ data }: Props) {
           } divide-y divide-rose-100/60 md:divide-y-0 md:divide-x`}
         >
           {charts.map((item) => {
-            const chartHeight = Math.max(item.microCount * 26 + 16, 120);
+            const chartHeight = Math.max(item.microCount * 26 + 40, 142);
             const pct = item.total > 0 ? (item.alcancado / item.total) * 100 : 0;
             return (
               <div key={item.equipe} className="flex flex-col gap-2 p-5">

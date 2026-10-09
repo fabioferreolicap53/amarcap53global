@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   RefreshCw,
   Ribbon,
+  Database,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -37,12 +38,54 @@ const TABS: { key: EstatisticasTab; label: string; description: string }[] = [
   },
 ];
 
+const LAST_UPDATE_KEY = "amarcap53_last_update";
+
 export default function EstatisticasGlobais() {
   const { loading, error, getStats, outubroRosaRows, filterData, refetch } = useEstatisticas();
   const [activeTab, setActiveTab] = useState<EstatisticasTab>("outubro_rosa");
   const [selUnidade, setSelUnidade] = useState<string | null>(null);
   const [selEquipe, setSelEquipe] = useState<string | null>(null);
   const [selMicroarea, setSelMicroarea] = useState<number | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<string>(() => {
+    try {
+      return localStorage.getItem(LAST_UPDATE_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+
+  const handleLastUpdate = (value: string) => {
+    setLastUpdate(value);
+    try {
+      if (value) localStorage.setItem(LAST_UPDATE_KEY, value);
+      else localStorage.removeItem(LAST_UPDATE_KEY);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const updateHint = useMemo(() => {
+    if (!lastUpdate) return null;
+    const d = new Date(`${lastUpdate}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return null;
+    const diffDays = Math.floor((Date.now() - d.getTime()) / 86400000);
+    if (diffDays < 0) return { text: "Agendado", className: "bg-sky-100 text-sky-700 ring-1 ring-sky-200" };
+    if (diffDays === 0) return { text: "Hoje", className: "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200" };
+    if (diffDays <= 7)
+      return {
+        text: `Há ${diffDays} dia${diffDays > 1 ? "s" : ""}`,
+        className: "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200",
+      };
+    if (diffDays <= 30)
+      return {
+        text: `Há ${diffDays} dias`,
+        className: "bg-amber-100 text-amber-700 ring-1 ring-amber-200",
+      };
+    return {
+      text: `Há ${diffDays} dias`,
+      className: "bg-rose-100 text-rose-700 ring-1 ring-rose-200",
+    };
+  }, [lastUpdate]);
 
   const isOutubro = activeTab === "outubro_rosa";
   const rawStats = getStats(activeTab);
@@ -136,16 +179,63 @@ export default function EstatisticasGlobais() {
               Análise quantitativa dos testes DNA-HPV por equipe, unidade e microárea.
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refetch()}
-            disabled={loading}
-            className="w-fit gap-1.5 border-navy-200 text-navy hover:bg-navy-50"
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-            Atualizar dados
-          </Button>
+          <div className="relative flex flex-col overflow-hidden rounded-2xl border border-navy-100 bg-gradient-to-br from-white via-white to-navy-50/70 shadow-sm transition-shadow hover:shadow-md sm:flex-row sm:items-stretch">
+            <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/70 to-transparent" />
+
+            {/* ── Segmento: última atualização do banco ── */}
+            <div className="flex items-center gap-3 px-3 py-2">
+              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-navy to-navy-700 text-white shadow-md shadow-navy-200">
+                <Database className="h-4 w-4" />
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white" />
+              </div>
+              <div className="min-w-0">
+                <label
+                  htmlFor="db-last-update"
+                  className="block text-[10px] font-bold uppercase tracking-wider text-navy/60"
+                >
+                  Última atualização do banco
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="db-last-update"
+                    type="date"
+                    value={lastUpdate}
+                    onChange={(e) => handleLastUpdate(e.target.value)}
+                    className="w-[9.5rem] cursor-pointer rounded-md bg-transparent text-sm font-semibold text-navy outline-none [color-scheme:light] focus-visible:ring-2 focus-visible:ring-navy-200"
+                  />
+                  {updateHint && (
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-sm",
+                        updateHint.className,
+                      )}
+                    >
+                      {updateHint.text}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ── Divisor ── */}
+            <div className="mx-3 h-px bg-gradient-to-r from-transparent via-navy-200/80 to-transparent sm:mx-0 sm:my-2.5 sm:h-auto sm:w-px sm:bg-gradient-to-b" />
+
+            {/* ── Segmento: ação de atualizar ── */}
+            <button
+              type="button"
+              onClick={() => refetch()}
+              disabled={loading}
+              className="group flex items-center justify-center gap-2 px-5 py-2 text-sm font-semibold text-navy outline-none transition-colors hover:bg-gradient-to-br hover:from-navy-50 hover:to-emerald-50/60 focus-visible:bg-navy-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw
+                className={cn(
+                  "h-4 w-4 text-navy transition-transform group-hover:rotate-90",
+                  loading && "animate-spin",
+                )}
+              />
+              Atualizar dados
+            </button>
+          </div>
         </div>
 
         {/* ── Tab Navigation ── */}

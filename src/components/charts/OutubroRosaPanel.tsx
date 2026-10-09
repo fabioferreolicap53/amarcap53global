@@ -277,9 +277,9 @@ export default function OutubroRosaPanel({ rows, selUnidade, selEquipe, selMicro
   const pct = totalGeral > 0 ? (alcancadoGeral / totalGeral) * 100 : 0;
 
   const heroStats = [
-    { label: "Total da Lista", value: totalGeral, icon: ListChecks, emphasis: false },
-    { label: "Alcançado", value: alcancadoGeral, icon: TrendingUp, emphasis: true },
-    { label: "A Alcançar", value: restante, icon: Target, emphasis: false },
+    { label: "Mulheres em atraso em 1 de outubro", value: totalGeral, icon: ListChecks, emphasis: false },
+    { label: "Mulheres alcançadas no Outubro Rosa", value: alcancadoGeral, icon: TrendingUp, emphasis: true },
+    { label: "Mulheres em atraso", value: restante, icon: Target, emphasis: false },
   ];
 
   return (
@@ -307,13 +307,15 @@ export default function OutubroRosaPanel({ rows, selUnidade, selEquipe, selMicro
                 key={s.label}
                 className={
                   s.emphasis
-                    ? "relative rounded-xl bg-gradient-to-br from-emerald-400/35 to-emerald-300/10 px-4 py-3 ring-2 ring-emerald-200/70 shadow-[0_0_26px_rgba(110,231,183,0.5)] backdrop-blur-sm"
-                    : "rounded-xl bg-white/15 px-4 py-3 backdrop-blur-sm"
+                    ? "relative flex flex-col justify-between gap-1 rounded-xl bg-gradient-to-br from-emerald-400/35 to-emerald-300/10 px-4 py-3 ring-2 ring-emerald-200/70 shadow-[0_0_26px_rgba(110,231,183,0.5)] backdrop-blur-sm"
+                    : "flex flex-col justify-between gap-1 rounded-xl bg-white/15 px-4 py-3 backdrop-blur-sm"
                 }
               >
-                <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-white/85">
-                  <s.icon className={`h-3.5 w-3.5 ${s.emphasis ? "text-emerald-100" : ""}`} />
-                  {s.label}
+                <div className="flex items-start gap-1.5 text-[10px] font-semibold uppercase leading-tight tracking-wide text-white/85">
+                  <s.icon
+                    className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${s.emphasis ? "text-emerald-100" : ""}`}
+                  />
+                  <span>{s.label}</span>
                 </div>
                 <p
                   className={`mt-1 font-bold tabular-nums ${
@@ -326,10 +328,10 @@ export default function OutubroRosaPanel({ rows, selUnidade, selEquipe, selMicro
                 </p>
               </div>
             ))}
-            <div className="rounded-xl bg-white/25 px-4 py-3 ring-1 ring-emerald-200/50 backdrop-blur-sm">
-              <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-white/80">
-                <Target className="h-3.5 w-3.5" />
-                % Alcançado
+            <div className="flex flex-col justify-between gap-1 rounded-xl bg-white/25 px-4 py-3 ring-1 ring-emerald-200/50 backdrop-blur-sm">
+              <div className="flex items-start gap-1.5 text-[10px] font-semibold uppercase leading-tight tracking-wide text-white/80">
+                <Target className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>% de mulheres alcançadas no Outubro Rosa</span>
               </div>
               <p className="mt-1 text-2xl font-bold tabular-nums">{pct.toFixed(1)}%</p>
             </div>
