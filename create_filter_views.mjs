@@ -8,10 +8,18 @@ const SEM_CITO_FILTER = "(cito_lab = '' OR cito_lab IS NULL) AND (cito_pep = '' 
 // por unidade, equipe, equipe+microárea e o filtro em cascata) são derivadas
 // destas mesmas linhas — 1 request substitui as 3 views anteriores.
 // Colunas na ordem do covering index idx_am53_ue_micro_rast.
+// Filtro Outubro Rosa 2026: apenas registros cujo dna_hpv_gal cai em out/2026.
+const OUTUBRO_2026_FILTER = "dna_hpv_gal >= '2026-10-01' AND dna_hpv_gal < '2026-11-01'";
+
 const views = [
   {
     name: "v_am53_consolidado",
     query: `SELECT MIN(rowid) as id, unidade, equipe, microarea, count(*) as total, SUM(CASE WHEN (${SEM_CITO_FILTER}) THEN 1 ELSE 0 END) as semcito FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' AND (${DNA_HPV_FILTER}) GROUP BY unidade, equipe, microarea ORDER BY total DESC`
+  },
+  {
+    // Mesma estrutura do consolidado, porém restrito ao dna_hpv_gal de outubro/2026.
+    name: "v_am53_outubro_rosa",
+    query: `SELECT MIN(rowid) as id, unidade, equipe, microarea, count(*) as total, SUM(CASE WHEN (${SEM_CITO_FILTER}) THEN 1 ELSE 0 END) as semcito FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' AND (${DNA_HPV_FILTER}) AND (${OUTUBRO_2026_FILTER}) GROUP BY unidade, equipe, microarea ORDER BY total DESC`
   }
 ];
 

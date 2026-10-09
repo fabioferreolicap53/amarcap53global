@@ -12,6 +12,7 @@ import {
   MapPin,
   AlertTriangle,
   RefreshCw,
+  Ribbon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,20 +20,25 @@ import type { EstatisticasTab, EstatisticasData, BucketCount } from "@/types/ama
 
 const TABS: { key: EstatisticasTab; label: string; description: string }[] = [
   {
+    key: "sem_cito",
+    label: "Sem Cito / Registros Pendentes",
+    description: "Gestão de lista",
+  },
+  {
     key: "total",
     label: "Total DNA-HPV",
     description: "Todos os testes DNA-HPV registrados",
   },
   {
-    key: "sem_cito",
-    label: "Sem Cito / Registros Pendentes",
-    description: "Testes DNA-HPV sem informação de citopatologia",
+    key: "outubro_rosa",
+    label: "Outubro Rosa 2026",
+    description: "Gestão de lista",
   },
 ];
 
 export default function EstatisticasGlobais() {
   const { loading, error, getStats, filterData, refetch } = useEstatisticas();
-  const [activeTab, setActiveTab] = useState<EstatisticasTab>("total");
+  const [activeTab, setActiveTab] = useState<EstatisticasTab>("outubro_rosa");
   const [selUnidade, setSelUnidade] = useState<string | null>(null);
   const [selEquipe, setSelEquipe] = useState<string | null>(null);
   const [selMicroarea, setSelMicroarea] = useState<number | null>(null);
@@ -142,28 +148,49 @@ export default function EstatisticasGlobais() {
 
         {/* ── Tab Navigation ── */}
         <div className="flex gap-1 rounded-lg border border-border bg-white p-1 shadow-sm">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={cn(
-                "flex-1 rounded-md px-4 py-3 text-left transition-all",
-                activeTab === tab.key
-                  ? "bg-navy text-white shadow-md"
-                  : "text-muted-foreground hover:bg-navy-50 hover:text-navy",
-              )}
-            >
-              <span className="block text-sm font-semibold">{tab.label}</span>
-              <span
+          {TABS.map((tab) => {
+            const isRosa = tab.key === "outubro_rosa";
+            const active = activeTab === tab.key;
+
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
                 className={cn(
-                  "mt-0.5 block text-xs",
-                  activeTab === tab.key ? "text-white/70" : "text-muted-foreground/60",
+                  "flex-1 rounded-md px-4 py-3 text-left transition-all",
+                  active && isRosa &&
+                    "bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-md shadow-rose-300/70",
+                  active && !isRosa && "bg-navy text-white shadow-md",
+                  !active && isRosa &&
+                    "bg-rose-50/70 text-rose-700 ring-1 ring-inset ring-rose-200/80 hover:bg-rose-100 hover:text-rose-800",
+                  !active && !isRosa &&
+                    "text-muted-foreground hover:bg-navy-50 hover:text-navy",
                 )}
               >
-                {tab.description}
-              </span>
-            </button>
-          ))}
+                <span className="flex items-center gap-1.5 text-sm font-semibold">
+                  {isRosa && (
+                    <Ribbon
+                      className={cn(
+                        "h-4 w-4 shrink-0",
+                        active ? "text-white" : "text-rose-500",
+                      )}
+                    />
+                  )}
+                  {tab.label}
+                </span>
+                <span
+                  className={cn(
+                    "mt-0.5 block text-xs",
+                    active
+                      ? isRosa ? "text-white/80" : "text-white/70"
+                      : isRosa ? "text-rose-500/80" : "text-muted-foreground/60",
+                  )}
+                >
+                  {tab.description}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* ── Cascade Filter ── */}

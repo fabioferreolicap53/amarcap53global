@@ -23,9 +23,10 @@ interface DropdownProps {
   color: string;
   count?: number;
   showSearch?: boolean;
+  step?: number;
 }
 
-function Dropdown({ label, icon: Icon, options, value, placeholder, onSelect, color, count, showSearch }: DropdownProps) {
+function Dropdown({ label, icon: Icon, options, value, placeholder, onSelect, color, count, showSearch, step }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -51,14 +52,25 @@ function Dropdown({ label, icon: Icon, options, value, placeholder, onSelect, co
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          "flex items-center gap-2.5 rounded-xl border-2 px-4 py-2.5 text-sm font-medium transition-all",
-          "hover:shadow-md active:scale-[0.98]",
+          "group flex items-center gap-2.5 rounded-xl border-2 px-4 py-2.5 text-sm font-medium transition-all",
+          "hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98]",
           value
             ? "border-current bg-white shadow-sm"
-            : "border-dashed border-navy/20 bg-white/80 text-navy/60 hover:border-navy/40",
+            : "border-dashed border-navy/20 bg-white/80 text-navy/60 hover:border-navy/50 hover:bg-white",
         )}
         style={value ? { color } : undefined}
       >
+        {step != null && (
+          <span
+            className={cn(
+              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-colors",
+              !value && "bg-navy/10 text-navy/50 group-hover:bg-navy/20",
+            )}
+            style={value ? { backgroundColor: `${color}22`, color } : undefined}
+          >
+            {step}
+          </span>
+        )}
         <span
           className={cn(
             "flex h-7 w-7 items-center justify-center rounded-lg",
@@ -200,20 +212,33 @@ export default function CascadeFilter({
   };
 
   return (
-    <div className="relative rounded-2xl border border-border/60 bg-white shadow-sm">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/40 px-5 py-3">
+    <div className="relative rounded-2xl border border-navy/15 bg-gradient-to-b from-white via-white to-navy-50/70 shadow-[0_10px_40px_-18px_rgba(15,42,84,0.35)]">
+      {/* Brilho decorativo (recortado só aqui — não corta os dropdowns) */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+        <div className="absolute -top-28 left-1/2 h-56 w-[480px] -translate-x-1/2 rounded-full bg-gradient-to-r from-blue-500/20 via-navy/15 to-pink-400/20 blur-3xl" />
+      </div>
+
+      {/* Header — centralizado */}
+      <div className="relative flex flex-col items-center gap-1.5 border-b border-navy/10 px-5 pb-4 pt-5 text-center">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-navy to-blue-600">
-            <Filter className="h-3.5 w-3.5 text-white" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-navy to-blue-600 shadow-md shadow-navy/30">
+            <Filter className="h-4 w-4 text-white" />
           </div>
-          <span className="text-sm font-semibold text-navy">Filtro Cascata</span>
-          <span className="text-xs text-muted-foreground">Unidade \u2192 Equipe \u2192 Microárea</span>
+          <div className="text-left">
+            <h2 className="text-sm font-bold tracking-wide text-navy">Filtro Cascata</h2>
+            <p className="text-[11px] text-muted-foreground">
+              Unidade <span className="text-navy/40">→</span> Equipe <span className="text-navy/40">→</span> Microárea
+            </p>
+          </div>
         </div>
+        <p className="max-w-md text-xs text-muted-foreground">
+          <span className="font-semibold text-navy">Comece pela Unidade</span> — os cards e gráficos
+          acompanham cada escolha na hora.
+        </p>
         {hasFilter && (
           <button
             onClick={clearAll}
-            className="flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
+            className="absolute right-4 top-4 flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
           >
             <X className="h-3 w-3" />
             Limpar filtros
@@ -221,8 +246,8 @@ export default function CascadeFilter({
         )}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+      {/* Filters — centralizados */}
+      <div className="relative flex flex-wrap items-center justify-center gap-3 px-5 py-5">
         <Dropdown
           label="Unidade"
           icon={Building2}
@@ -236,11 +261,10 @@ export default function CascadeFilter({
           }}
           color="#2563eb"
           showSearch
+          step={1}
         />
 
-        {selectedUnidade && (
-          <div className="text-xl font-light text-navy/20">/</div>
-        )}
+        <div className="text-lg font-light text-navy/25">→</div>
 
         <Dropdown
           label="Equipe"
@@ -254,11 +278,10 @@ export default function CascadeFilter({
           }}
           color="#059669"
           count={equipes.length}
+          step={2}
         />
 
-        {selectedEquipe && (
-          <div className="text-xl font-light text-navy/20">/</div>
-        )}
+        <div className="text-lg font-light text-navy/25">→</div>
 
         <Dropdown
           label="Microárea"
@@ -269,14 +292,19 @@ export default function CascadeFilter({
           onSelect={(v) => onSelectMicroarea(v != null ? Number(v) : null)}
           color="#d97706"
           count={microareas.length}
+          step={3}
         />
-
-        {hasFilter && (
-          <div className="ml-auto rounded-full bg-navy px-4 py-2 text-sm font-bold text-white shadow-lg">
-            {totalRegistros.toLocaleString("pt-BR")} registros
-          </div>
-        )}
       </div>
+
+      {/* Contador — centralizado */}
+      {hasFilter && (
+        <div className="relative flex justify-center pb-5">
+          <div className="flex items-center gap-2 rounded-full bg-gradient-to-r from-navy to-blue-600 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-navy/30">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+            {totalRegistros.toLocaleString("pt-BR")} registros encontrados
+          </div>
+        </div>
+      )}
     </div>
   );
 }

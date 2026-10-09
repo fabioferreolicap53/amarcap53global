@@ -54,7 +54,7 @@ export interface EstatisticasData {
   totalGeral: number;
 }
 
-export type EstatisticasTab = "total" | "sem_cito";
+export type EstatisticasTab = "total" | "sem_cito" | "outubro_rosa";
 
 /** Dados brutos das views para filtro cascata */
 export interface FilterData {

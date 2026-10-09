@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import type { BucketCount, EstatisticasData, FilterData } from "@/types/amarcap53";
+import type { BucketCount, EstatisticasData, EstatisticasTab, FilterData } from "@/types/amarcap53";
 
 // UMA única view consolidada: devolve `total` E `semcito` agrupados por
 // unidade+equipe+microárea. Todas as dimensões exibidas no frontend são
@@ -7,6 +7,8 @@ import type { BucketCount, EstatisticasData, FilterData } from "@/types/amarcap5
 // A view é servida pelo covering index idx_am53_ue_micro_rast e a leitura
 // usa skipTotal=1 (evita o COUNT(*) duplicado que o PocketBase faria).
 const VIEW_CONSOLIDADO = "v_am53_consolidado";
+// Mesma estrutura do consolidado, filtrada no servidor por dna_hpv_gal de out/2026.
+const VIEW_OUTUBRO_ROSA = "v_am53_outubro_rosa";
 
 interface ViewConsolidadoRecord {
   id: string;
@@ -17,12 +19,13 @@ interface ViewConsolidadoRecord {
   semcito: number;
 }
 
-const CACHE_KEY = "amarcap53_views_v13";
+const CACHE_KEY = "amarcap53_views_v14";
 const CACHE_TTL = 30 * 60 * 1000; // 30 min
 
 interface CacheEntry {
   total: EstatisticasData;
   semCito: EstatisticasData;
+  outubroRosa: EstatisticasData;
   filterData: FilterData;
   timestamp: number;
 }
@@ -137,7 +140,7 @@ function toBuckets(map: Map<string, number>): BucketCount[] {
 
 /** Busca a view consolidada. Um único request devolve total + semcito por
  *  unidade/equipe/microárea; todas as dimensões são derivadas destas linhas. */
-async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: EstatisticasData; filterData: FilterData }> {
+async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: EstatisticasData; outubroRosa: EstatisticasData; filterData: FilterData }> {
   const apiBase = import.meta.env.VITE_POCKETBASE_URL;
   const login = import.meta.env.VITE_POCKETBASE_LOGIN;
   const password = import.meta.env.VITE_POCKETBASE_PASSWORD;
@@ -156,12 +159,16 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
     cacheToken(token);
   }
 
-  const load = (t: string) =>
-    fetchView<ViewConsolidadoRecord>(apiBase, { Authorization: t }, VIEW_CONSOLIDADO);
+  const load = (t: string, viewName: string) =>
+    fetchView<ViewConsolidadoRecord>(apiBase, { Authorization: t }, viewName);
 
   let rows: ViewConsolidadoRecord[] = [];
+  let octRows: ViewConsolidadoRecord[] = [];
   try {
-    rows = await load(token);
+    [rows, octRows] = await Promise.all([
+      load(token, VIEW_CONSOLIDADO),
+      load(token, VIEW_OUTUBRO_ROSA),
+    ]);
   } catch {
     // token provavelmente expirado (401) — tenta re-auth abaixo
   }
@@ -172,7 +179,8 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
     try {
       const token2 = await authRequest(apiBase, login, password);
       cacheToken(token2);
-      rows = await load(token2);
+      rows = await load(token2, VIEW_CONSOLIDADO);
+      octRows = await load(token2, VIEW_OUTUBRO_ROSA);
     } catch {
       // sem token válido: propaga para a UI (não cai no cache vazio)
       throw new Error("Falha ao autenticar no servidor de dados");
@@ -180,36 +188,15 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
   }
 
   // ── Todas as dimensões derivam das MESMAS linhas ──
-  const totalUnidade = new Map<string, number>();
-  const totalEquipe = new Map<string, number>();
-  const totalEqMicro = new Map<string, number>();
-  const citoUnidade = new Map<string, number>();
-  const citoEquipe = new Map<string, number>();
-  const citoEqMicro = new Map<string, number>();
-
-  // filterData (cascata unidade → equipe → microárea)
   const unidadesSet = new Set<string>();
   const equipesMap = new Map<string, Set<string>>();
   const microMap = new Map<string, Set<number>>();
   const totais: Record<string, number> = {};
 
-  let totalGeral = 0;
-  let semCitoGeral = 0;
-
   for (const r of rows) {
     const u = r.unidade || "Não informado";
     const e = r.equipe || "Não informado";
     const m = r.microarea;
-    const label = `${e} / Microárea ${m}`;
-
-    addTo(totalUnidade, u, r.total);
-    addTo(totalEquipe, e, r.total);
-    addTo(totalEqMicro, label, r.total);
-    addTo(citoUnidade, u, r.semcito);
-    addTo(citoEquipe, e, r.semcito);
-    addTo(citoEqMicro, label, r.semcito);
-    totalGeral += r.total;
-    semCitoGeral += r.semcito;
 
     unidadesSet.add(u);
     if (!equipesMap.has(u)) equipesMap.set(u, new Set());
@@ -221,19 +208,35 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
     totais[`${key}|${m}`] = r.total;
   }
 
-  const total: EstatisticasData = {
-    totalGeral,
-    porEquipe: toBuckets(totalEquipe),
-    porUnidade: toBuckets(totalUnidade),
-    porEquipeMicroarea: toBuckets(totalEqMicro),
-  };
+  // Agrega as dimensões exibidas a partir de uma coluna da view.
+  function aggregate(src: ViewConsolidadoRecord[], field: "total" | "semcito"): EstatisticasData {
+    const porUnidade = new Map<string, number>();
+    const porEquipe = new Map<string, number>();
+    const porEqMicro = new Map<string, number>();
+    let geral = 0;
 
-  const semCito: EstatisticasData = {
-    totalGeral: semCitoGeral,
-    porEquipe: toBuckets(citoEquipe),
-    porUnidade: toBuckets(citoUnidade),
-    porEquipeMicroarea: toBuckets(citoEqMicro),
-  };
+    for (const r of src) {
+      const u = r.unidade || "Não informado";
+      const e = r.equipe || "Não informado";
+      const v = r[field];
+      addTo(porUnidade, u, v);
+      addTo(porEquipe, e, v);
+      addTo(porEqMicro, `${e} / Microárea ${r.microarea}`, v);
+      geral += v;
+    }
+
+    return {
+      totalGeral: geral,
+      porEquipe: toBuckets(porEquipe),
+      porUnidade: toBuckets(porUnidade),
+      porEquipeMicroarea: toBuckets(porEqMicro),
+    };
+  }
+
+  const total = aggregate(rows, "total");
+  const semCito = aggregate(rows, "semcito");
+  // Outubro Rosa: cópia do "Sem Cito", porém da view restrita a out/2026.
+  const outubroRosa = aggregate(octRows, "semcito");
 
   const filterData: FilterData = {
     unidades: Array.from(unidadesSet).sort(),
@@ -246,7 +249,7 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
     totais,
   };
 
-  return { total, semCito, filterData };
+  return { total, semCito, outubroRosa, filterData };
 }
 
 export function useEstatisticas() {
@@ -254,6 +257,7 @@ export function useEstatisticas() {
   const [error, setError] = useState<string | null>(null);
   const [totalStats, setTotalStats] = useState<EstatisticasData | null>(null);
   const [semCitoStats, setSemCitoStats] = useState<EstatisticasData | null>(null);
+  const [outubroRosaStats, setOutubroRosaStats] = useState<EstatisticasData | null>(null);
   const [filterData, setFilterData] = useState<FilterData | null>(null);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
@@ -265,6 +269,7 @@ export function useEstatisticas() {
       if (cached) {
         setTotalStats(cached.total);
         setSemCitoStats(cached.semCito);
+        setOutubroRosaStats(cached.outubroRosa);
         setFilterData(cached.filterData);
         setLoading(false);
         return;
@@ -272,11 +277,12 @@ export function useEstatisticas() {
     }
 
     try {
-      const { total, semCito, filterData: fd } = await fetchAllViews();
+      const { total, semCito, outubroRosa, filterData: fd } = await fetchAllViews();
       setTotalStats(total);
       setSemCitoStats(semCito);
+      setOutubroRosaStats(outubroRosa);
       setFilterData(fd);
-      saveCache({ total, semCito, filterData: fd, timestamp: Date.now() });
+      saveCache({ total, semCito, outubroRosa, filterData: fd, timestamp: Date.now() });
     } catch (err) {
       console.error("[useEstatisticas] Error:", err);
       setError(err instanceof Error ? err.message : "Erro ao carregar dados");
@@ -290,13 +296,13 @@ export function useEstatisticas() {
   }, [fetchData]);
 
   const getStats = useCallback(
-    (type: "total" | "sem_cito"): EstatisticasData => {
-      if (type === "total") {
-        return totalStats ?? { totalGeral: 0, porEquipe: [], porUnidade: [], porEquipeMicroarea: [] };
-      }
-      return semCitoStats ?? { totalGeral: 0, porEquipe: [], porUnidade: [], porEquipeMicroarea: [] };
+    (type: EstatisticasTab): EstatisticasData => {
+      const empty: EstatisticasData = { totalGeral: 0, porEquipe: [], porUnidade: [], porEquipeMicroarea: [] };
+      if (type === "total") return totalStats ?? empty;
+      if (type === "outubro_rosa") return outubroRosaStats ?? empty;
+      return semCitoStats ?? empty;
     },
-    [totalStats, semCitoStats],
+    [totalStats, semCitoStats, outubroRosaStats],
   );
 
   const emptyFilter: FilterData = { unidades: [], equipes: {}, microareas: {}, totais: {} };
