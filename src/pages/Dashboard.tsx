@@ -1,4 +1,3 @@
-import Header from "@/components/layout/Header";
 import MetricCards, { type MetricData } from "@/components/dashboard/MetricCards";
 import DataTable, { type DataRecord } from "@/components/dashboard/DataTable";
 import { Badge } from "@/components/ui/badge";
@@ -137,8 +136,6 @@ const columns = [
 export default function Dashboard() {
   return (
     <div className="min-h-screen bg-[#f4f6f9]">
-      <Header />
-
       <main className="mx-auto max-w-7xl space-y-6 px-6 py-8">
         {/* Page Title */}
         <div>

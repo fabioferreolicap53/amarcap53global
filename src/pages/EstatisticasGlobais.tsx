@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect } from "react";
-import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import SummaryCard from "@/components/charts/SummaryCard";
 import ExpandableBarChart from "@/components/charts/ExpandableBarChart";
@@ -313,8 +312,6 @@ export default function EstatisticasGlobais() {
 
   return (
     <div className="min-h-screen bg-[#f4f6f9]">
-      <Header />
-
       <main className="mx-auto max-w-[1400px] space-y-4 px-3 py-4 sm:space-y-6 sm:px-6 sm:py-6">
         {/* ── Page Header ── */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
