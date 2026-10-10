@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import SummaryCard from "@/components/charts/SummaryCard";
@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { pb } from "@/services";
 import { cn } from "@/lib/utils";
 import type { EstatisticasTab, EstatisticasData, BucketCount } from "@/types/amarcap53";
 
@@ -94,6 +95,47 @@ function writeLastUpdate(value: string): void {
   }
 }
 
+// ── Persistência no servidor (PocketBase) ──
+// A data é gravada numa coleção de configuração, por isso passa a valer para
+// todos os dispositivos/navegadores — não depende mais do armazenamento local.
+const CONFIG_COLLECTION = "amarcap53global_config";
+const LAST_UPDATE_SETTING = "last_update";
+
+interface ConfigRecord {
+  id: string;
+  created: string;
+  updated: string;
+  collectionId: string;
+  collectionName: string;
+  key: string;
+  value: string;
+}
+
+/** Lê a data gravada no servidor. */
+async function fetchLastUpdateRemote(): Promise<string | null> {
+  const res = await pb.getList<ConfigRecord>(CONFIG_COLLECTION, {
+    filter: `key="${LAST_UPDATE_SETTING}"`,
+    perPage: 1,
+  });
+  return res.items[0]?.value || null;
+}
+
+/** Grava a data no servidor, criando o registro na primeira vez. */
+async function saveLastUpdateRemote(value: string): Promise<void> {
+  const res = await pb.getList<ConfigRecord>(CONFIG_COLLECTION, {
+    filter: `key="${LAST_UPDATE_SETTING}"`,
+    perPage: 1,
+  });
+  const existing = res.items[0];
+  if (existing) {
+    if (existing.value !== value) {
+      await pb.update<ConfigRecord>(CONFIG_COLLECTION, existing.id, { value });
+    }
+  } else if (value) {
+    await pb.create<ConfigRecord>(CONFIG_COLLECTION, { key: LAST_UPDATE_SETTING, value });
+  }
+}
+
 export default function EstatisticasGlobais() {
   const { loading, error, getStats, outubroRosaRows, filterData, refetch } = useEstatisticas();
   const [activeTab, setActiveTab] = useState<EstatisticasTab>("outubro_rosa");
@@ -105,7 +147,35 @@ export default function EstatisticasGlobais() {
   const handleLastUpdate = (value: string) => {
     setLastUpdate(value);
     writeLastUpdate(value);
+    // Persiste no servidor → visível em qualquer dispositivo/navegador
+    saveLastUpdateRemote(value).catch(() => {
+      /* falha de rede: a cópia local permanece */
+    });
   };
+
+  // Carrega a data do servidor ao abrir (sobrepõe o cache local quando existir)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const remote = await fetchLastUpdateRemote();
+        if (cancelled) return;
+        if (remote) {
+          setLastUpdate(remote);
+          writeLastUpdate(remote); // mantém os caches locais alinhados
+        } else {
+          // Servidor ainda sem registro: semeia com o valor local, se houver
+          const local = readLastUpdate();
+          if (local) await saveLastUpdateRemote(local);
+        }
+      } catch {
+        /* offline/sem credenciais: segue com o valor local */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ── Proteção por senha para inserir/alterar a data ──
   const [unlocked, setUnlocked] = useState(false);
@@ -359,25 +429,6 @@ export default function EstatisticasGlobais() {
                 )}
               </div>
             </div>
-
-            {/* ── Divisor ── */}
-            <div className="mx-3 h-px bg-gradient-to-r from-transparent via-navy-200/80 to-transparent sm:mx-0 sm:my-2.5 sm:h-auto sm:w-px sm:bg-gradient-to-b" />
-
-            {/* ── Segmento: ação de atualizar ── */}
-            <button
-              type="button"
-              onClick={() => refetch()}
-              disabled={loading}
-              className="group flex items-center justify-center gap-2 px-4 py-1.5 text-sm font-semibold text-navy outline-none transition-colors hover:bg-gradient-to-br hover:from-navy-50 hover:to-emerald-50/60 focus-visible:bg-navy-50 disabled:cursor-not-allowed disabled:opacity-60 sm:px-5 sm:py-2"
-            >
-              <RefreshCw
-                className={cn(
-                  "h-4 w-4 text-navy transition-transform group-hover:rotate-90",
-                  loading && "animate-spin",
-                )}
-              />
-              Atualizar dados
-            </button>
           </div>
         </div>
 
