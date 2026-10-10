@@ -76,7 +76,7 @@ function buildOption(group: EquipeGroup, color: string) {
     },
     series: [
       {
-        name: "Alcançado",
+        name: "Alcançada(s)",
         type: "bar" as const,
         stack: "lista",
         barMaxWidth: 22,
@@ -98,14 +98,14 @@ function buildOption(group: EquipeGroup, color: string) {
         label: {
           show: true,
           position: "inside" as const,
-          color: "#ecfdf5",
+          color: "#ffffff",
           fontFamily: "Inter",
           fontWeight: "bold" as const,
-          fontSize: 12,
-          textBorderColor: "rgba(4,120,87,0.92)",
-          textBorderWidth: 3,
-          textShadowBlur: 8,
-          textShadowColor: "rgba(255,255,255,0.65)",
+          fontSize: 14,
+          textBorderColor: "rgba(4,120,87,1)",
+          textBorderWidth: 4,
+          textShadowBlur: 10,
+          textShadowColor: "rgba(0,0,0,0.45)",
           formatter: (p: { value: number }) => (p.value > 0 ? p.value.toLocaleString("pt-BR") : ""),
         },
         markLine: {
@@ -189,7 +189,7 @@ function buildOption(group: EquipeGroup, color: string) {
         animationEasing: "cubicOut" as const,
       },
       {
-        name: "A alcançar",
+        name: "Mulheres em atraso",
         type: "bar" as const,
         stack: "lista",
         barMaxWidth: 22,
@@ -245,8 +245,8 @@ function buildOption(group: EquipeGroup, color: string) {
         const pct = m.total > 0 ? ((m.alcancado / m.total) * 100).toFixed(1) : "0.0";
         return (
           `<strong style="color:${color}">${group.equipe}</strong><br/>Microárea ${m.micro}<br/>` +
-          `<span style="color:#34d399">●</span> Alcançado: <strong>${m.alcancado.toLocaleString("pt-BR")}</strong><br/>` +
-          `<span style="color:#f87171">●</span> A alcançar: <strong>${restante.toLocaleString("pt-BR")}</strong><br/>` +
+          `<span style="color:#34d399">●</span> Alcançada(s): <strong>${m.alcancado.toLocaleString("pt-BR")}</strong><br/>` +
+          `<span style="color:#f87171">●</span> Mulheres em atraso: <strong>${restante.toLocaleString("pt-BR")}</strong><br/>` +
           `Total: <strong>${m.total.toLocaleString("pt-BR")}</strong> (${pct}%)`
         );
       },
@@ -320,11 +320,11 @@ export default function EquipeMicroStackedPaginated({ data }: Props) {
             <div className="hidden items-center gap-3 rounded-full border border-rose-200 bg-white/70 px-3 py-1.5 sm:flex">
               <span className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
                 <span className="h-3 w-3 rounded-sm bg-gradient-to-r from-emerald-400 to-emerald-600 shadow-sm shadow-emerald-300/70" />
-                Alcançado
+                Alcançada(s)
               </span>
               <span className="flex items-center gap-1.5 text-[11px] font-semibold text-red-500">
                 <span className="h-3 w-3 rounded-sm bg-gradient-to-r from-red-300 to-red-500 shadow-sm shadow-red-300/70" />
-                A alcançar
+                Mulheres em atraso
               </span>
             </div>
             {totalPages > 1 && (
@@ -376,7 +376,7 @@ export default function EquipeMicroStackedPaginated({ data }: Props) {
                     <h3 className="text-sm font-bold leading-tight text-navy">{item.equipe}</h3>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 px-2.5 py-0.5 text-xs font-bold text-white shadow-sm shadow-emerald-300/70">
+                    <span className="rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 px-3 py-0.5 text-sm font-extrabold tabular-nums text-white shadow-md shadow-emerald-300/70 ring-2 ring-emerald-200/70">
                       {item.alcancado.toLocaleString("pt-BR")}
                     </span>
                     <span

@@ -52,7 +52,7 @@ function Dropdown({ label, icon: Icon, options, value, placeholder, onSelect, co
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          "group flex items-center gap-2.5 rounded-xl border-2 px-4 py-2.5 text-sm font-medium transition-all",
+          "group flex w-full items-center gap-2.5 rounded-xl border-2 px-3 py-2 text-sm font-medium transition-all sm:w-auto sm:px-4 sm:py-2.5",
           "hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98]",
           value
             ? "border-current bg-white shadow-sm"
@@ -82,7 +82,7 @@ function Dropdown({ label, icon: Icon, options, value, placeholder, onSelect, co
         </span>
         <div className="text-left">
           <div className="text-[10px] uppercase tracking-wider opacity-60">{label}</div>
-          <div className="max-w-[180px] truncate">{value || placeholder}</div>
+          <div className="max-w-full truncate sm:max-w-[180px]">{value || placeholder}</div>
         </div>
         {value && (
           <span className="ml-1 rounded-full bg-current/10 px-1.5 py-0.5 text-[10px] font-bold" style={{ color }}>
@@ -219,9 +219,9 @@ export default function CascadeFilter({
       </div>
 
       {/* Header — centralizado */}
-      <div className="relative flex flex-col items-center gap-1.5 border-b border-navy/10 px-5 pb-4 pt-5 text-center">
+      <div className="relative flex flex-col items-center gap-1.5 border-b border-navy/10 px-4 pb-3 pt-4 text-center sm:px-5 sm:pb-4 sm:pt-5">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-navy to-blue-600 shadow-md shadow-navy/30">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-navy to-blue-600 shadow-md shadow-navy/30 sm:h-9 sm:w-9">
             <Filter className="h-4 w-4 text-white" />
           </div>
           <div className="text-left">
@@ -238,7 +238,7 @@ export default function CascadeFilter({
         {hasFilter && (
           <button
             onClick={clearAll}
-            className="absolute right-4 top-4 flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
+            className="absolute right-3 top-3 flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100 sm:right-4 sm:top-4 sm:px-3"
           >
             <X className="h-3 w-3" />
             Limpar filtros
@@ -246,8 +246,8 @@ export default function CascadeFilter({
         )}
       </div>
 
-      {/* Filters — centralizados */}
-      <div className="relative flex flex-wrap items-center justify-center gap-3 px-5 py-5">
+      {/* Filters — pilha no mobile, linha no desktop */}
+      <div className="relative grid grid-cols-1 gap-2.5 px-4 py-4 sm:flex sm:flex-wrap sm:items-center sm:justify-center sm:gap-3 sm:px-5 sm:py-5">
         <Dropdown
           label="Unidade"
           icon={Building2}
@@ -264,7 +264,7 @@ export default function CascadeFilter({
           step={1}
         />
 
-        <div className="text-lg font-light text-navy/25">→</div>
+        <div className="hidden text-lg font-light text-navy/25 sm:block">→</div>
 
         <Dropdown
           label="Equipe"
@@ -281,7 +281,7 @@ export default function CascadeFilter({
           step={2}
         />
 
-        <div className="text-lg font-light text-navy/25">→</div>
+        <div className="hidden text-lg font-light text-navy/25 sm:block">→</div>
 
         <Dropdown
           label="Microárea"
@@ -298,7 +298,7 @@ export default function CascadeFilter({
 
       {/* Contador — centralizado */}
       {hasFilter && (
-        <div className="relative flex justify-center pb-5">
+        <div className="relative flex justify-center px-4 pb-4 sm:px-5 sm:pb-5">
           <div className="flex items-center gap-2 rounded-full bg-gradient-to-r from-navy to-blue-600 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-navy/30">
             <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
             {totalRegistros.toLocaleString("pt-BR")} registros encontrados
