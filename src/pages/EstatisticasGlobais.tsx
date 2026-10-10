@@ -120,19 +120,29 @@ async function fetchLastUpdateRemote(): Promise<string | null> {
   return res.items[0]?.value || null;
 }
 
-/** Grava a data no servidor, criando o registro na primeira vez. */
+/** Grava a data no servidor, criando o registro na primeira vez.
+ *  Faz uma segunda tentativa para cobrir falhas transitórias de rede. */
 async function saveLastUpdateRemote(value: string): Promise<void> {
-  const res = await pb.getList<ConfigRecord>(CONFIG_COLLECTION, {
-    filter: `key="${LAST_UPDATE_SETTING}"`,
-    perPage: 1,
-  });
-  const existing = res.items[0];
-  if (existing) {
-    if (existing.value !== value) {
-      await pb.update<ConfigRecord>(CONFIG_COLLECTION, existing.id, { value });
+  const attempt = async () => {
+    const res = await pb.getList<ConfigRecord>(CONFIG_COLLECTION, {
+      filter: `key="${LAST_UPDATE_SETTING}"`,
+      perPage: 1,
+    });
+    const existing = res.items[0];
+    if (existing) {
+      if (existing.value !== value) {
+        await pb.update<ConfigRecord>(CONFIG_COLLECTION, existing.id, { value });
+      }
+    } else if (value) {
+      await pb.create<ConfigRecord>(CONFIG_COLLECTION, { key: LAST_UPDATE_SETTING, value });
     }
-  } else if (value) {
-    await pb.create<ConfigRecord>(CONFIG_COLLECTION, { key: LAST_UPDATE_SETTING, value });
+  };
+
+  try {
+    await attempt();
+  } catch {
+    await new Promise((r) => setTimeout(r, 1000));
+    await attempt();
   }
 }
 
@@ -148,8 +158,8 @@ export default function EstatisticasGlobais() {
     setLastUpdate(value);
     writeLastUpdate(value);
     // Persiste no servidor → visível em qualquer dispositivo/navegador
-    saveLastUpdateRemote(value).catch(() => {
-      /* falha de rede: a cópia local permanece */
+    saveLastUpdateRemote(value).catch((err) => {
+      console.warn("[lastUpdate] não foi possível gravar no servidor:", err);
     });
   };
 
@@ -168,8 +178,9 @@ export default function EstatisticasGlobais() {
           const local = readLastUpdate();
           if (local) await saveLastUpdateRemote(local);
         }
-      } catch {
+      } catch (err) {
         /* offline/sem credenciais: segue com o valor local */
+        console.warn("[lastUpdate] leitura do servidor indisponível:", err);
       }
     })();
     return () => {
