@@ -48,6 +48,21 @@ function readActiveTab(): EstatisticasTab {
   return "outubro_rosa";
 }
 
+/** "YYYY-MM-DD" → "DD/MM/YYYY" p/ exibição; fora do padrão → "" */
+function isoToBR(v: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+}
+
+/** Máscara DD/MM/YYYY — recebe só dígitos, devolve no máx. "99/99/9999" */
+function maskBR(digits: string): string {
+  const d = digits.slice(0, 8);
+  const parts = [d.slice(0, 2)];
+  if (d.length > 2) parts.push(d.slice(2, 4));
+  if (d.length > 4) parts.push(d.slice(4, 8));
+  return parts.join("/");
+}
+
 /** Lê a data salva: localStorage → cookie → sessionStorage.
  *  Camadas extras cobrem ambientes onde localStorage é bloqueado
  *  (iframe sandbox) ou limpo a cada reload. */
@@ -163,6 +178,13 @@ export default function EstatisticasGlobais() {
   const [selEquipe, setSelEquipe] = useState<string | null>(null);
   const [selMicroarea, setSelMicroarea] = useState<number | null>(null);
   const [lastUpdate, setLastUpdate] = useState<string>(() => readLastUpdate());
+  // Texto do input (DD/MM/YYYY) — estado local só p/ digitação com máscara
+  const [dateText, setDateText] = useState(() => isoToBR(lastUpdate));
+
+  // Mantém o texto em sincronia quando a data muda de fora (ex.: servidor)
+  useEffect(() => {
+    setDateText(isoToBR(lastUpdate));
+  }, [lastUpdate]);
 
   const handleLastUpdate = (value: string) => {
     setLastUpdate(value);
@@ -171,6 +193,27 @@ export default function EstatisticasGlobais() {
     saveLastUpdateRemote(value).catch((err) => {
       console.warn("[lastUpdate] não foi possível gravar no servidor:", err);
     });
+  };
+
+  // Digitação com máscara DD/MM/YYYY — commita só quando completa e válida
+  const handleDateText = (raw: string) => {
+    const masked = maskBR(raw.replace(/\D/g, ""));
+    setDateText(masked);
+    if (masked.length < 10) return;
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(masked);
+    if (!m) return;
+    const dd = Number(m[1]);
+    const mm = Number(m[2]);
+    const yyyy = Number(m[3]);
+    const probe = new Date(yyyy, mm - 1, dd);
+    const valid =
+      probe.getFullYear() === yyyy &&
+      probe.getMonth() === mm - 1 &&
+      probe.getDate() === dd;
+    if (!valid) return; // ex.: 31/02 → só formata, não grava
+    handleLastUpdate(
+      `${String(yyyy).padStart(4, "0")}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`,
+    );
   };
 
   // Carrega a data do servidor ao abrir (sobrepõe o cache local quando existir)
@@ -321,12 +364,17 @@ export default function EstatisticasGlobais() {
                   <div className="flex min-w-0 items-center gap-2">
                     <input
                       id="db-last-update"
-                      type="date"
-                      value={lastUpdate}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={10}
+                      placeholder="DD/MM/AAAA"
+                      value={dateText}
                       disabled={!unlocked}
-                      onChange={(e) => handleLastUpdate(e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => handleDateText(e.target.value)}
+                      onBlur={() => setDateText(isoToBR(lastUpdate))}
                       className={cn(
-                        "min-w-0 w-full rounded-md bg-transparent text-sm font-semibold text-navy outline-none [color-scheme:light] focus-visible:ring-2 focus-visible:ring-navy-200 sm:w-[9.5rem]",
+                        "min-w-0 w-full rounded-md bg-transparent text-sm font-semibold tabular-nums tracking-wide text-navy outline-none focus-visible:ring-2 focus-visible:ring-navy-200 sm:w-[9.5rem]",
                         unlocked ? "cursor-pointer" : "cursor-not-allowed opacity-55",
                       )}
                     />
@@ -461,10 +509,6 @@ export default function EstatisticasGlobais() {
               <span className="text-sm text-muted-foreground">
                 Carregando dados do servidor...
               </span>
-              <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-navy/40">
-                Desenvolvido por Fabio Ferreira de Oliveira · DAPS/CAP5.3
-              </span>
-
             </div>
           </div>
         )}
