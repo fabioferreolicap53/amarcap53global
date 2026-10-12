@@ -33,7 +33,20 @@ const TABS: { key: EstatisticasTab; label: string; description: string }[] = [
 ];
 
 const LAST_UPDATE_KEY = "amarcap53_last_update";
+const ACTIVE_TAB_KEY = "amarcap53_active_tab";
 const DB_EDIT_PASSWORD = "dapsmulher";
+
+/** Aba ativa persistida (sobrevive F5; descartada ao fechar a aba do navegador).
+ *  Valida contra TABS — chave removida cai no padrão. */
+function readActiveTab(): EstatisticasTab {
+  try {
+    const v = sessionStorage.getItem(ACTIVE_TAB_KEY);
+    if (v && TABS.some((t) => t.key === v)) return v as EstatisticasTab;
+  } catch {
+    /* storage indisponível */
+  }
+  return "outubro_rosa";
+}
 
 /** Lê a data salva: localStorage → cookie → sessionStorage.
  *  Camadas extras cobrem ambientes onde localStorage é bloqueado
@@ -136,7 +149,16 @@ async function saveLastUpdateRemote(value: string): Promise<void> {
 
 export default function EstatisticasGlobais() {
   const { loading, error, outubroRosaRows, pendentesRows, filterData, refetch } = useEstatisticas();
-  const [activeTab, setActiveTab] = useState<EstatisticasTab>("outubro_rosa");
+  const [activeTab, setActiveTab] = useState<EstatisticasTab>(readActiveTab);
+
+  // Persiste a aba escolhida → F5 mantém o usuário onde estava
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(ACTIVE_TAB_KEY, activeTab);
+    } catch {
+      /* storage indisponível */
+    }
+  }, [activeTab]);
   const [selUnidade, setSelUnidade] = useState<string | null>(null);
   const [selEquipe, setSelEquipe] = useState<string | null>(null);
   const [selMicroarea, setSelMicroarea] = useState<number | null>(null);
