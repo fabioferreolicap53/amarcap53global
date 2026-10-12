@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect, Fragment } from "react";
 import { Building2, Users, MapPin, X, Filter, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FilterData } from "@/types/amarcap53";
@@ -25,6 +25,26 @@ interface DropdownProps {
   showSearch?: boolean;
   step?: number;
 }
+
+/** Mensagem de apoio do header por progresso (0 = nada escolhido … 3 = completo) */
+const DICAS: { strong: string; rest: string }[] = [
+  {
+    strong: "Comece pela Unidade",
+    rest: "— clique no passo 1 abaixo e cards + gráficos atualizam na hora.",
+  },
+  {
+    strong: "Unidade selecionada ✓",
+    rest: "— agora escolha a Equipe (passo 2) para refinar o recorte.",
+  },
+  {
+    strong: "Equipe selecionada ✓",
+    rest: "— última etapa: Microárea (passo 3). Prefere ver tudo? Deixe “Todas”.",
+  },
+  {
+    strong: "Filtro completo ✓",
+    rest: "— 3 de 3 etapas ativas. “Limpar filtros” volta ao início.",
+  },
+];
 
 function Dropdown({ label, icon: Icon, options, value, placeholder, onSelect, color, count, showSearch, step }: DropdownProps) {
   const [open, setOpen] = useState(false);
@@ -211,6 +231,28 @@ export default function CascadeFilter({
     onSelectMicroarea(null);
   };
 
+  // Cobertura total do banco — exibida no header como contexto
+  const totals = useMemo(() => {
+    let equipes = 0;
+    let micros = 0;
+    for (const eqs of Object.values(filterData.equipes)) equipes += eqs.length;
+    for (const ms of Object.values(filterData.microareas)) micros += ms.length;
+    return { unidades: filterData.unidades.length, equipes, micros };
+  }, [filterData]);
+
+  // 0 = nada escolhido … 3 = trilha completa
+  const progress = selectedMicroarea != null ? 3 : selectedEquipe ? 2 : selectedUnidade ? 1 : 0;
+
+  const steps = [
+    { n: 1, label: "Unidade", done: !!selectedUnidade, active: progress === 0 },
+    { n: 2, label: "Equipe", done: !!selectedEquipe, active: progress === 1 },
+    { n: 3, label: "Microárea", done: selectedMicroarea != null, active: progress === 2 },
+  ];
+
+  // Dica muda conforme o avanço — sempre aponta o próximo passo
+  const dica = DICAS[progress] ?? DICAS[0]!;
+  const trilhaCompleta = progress === 3;
+
   return (
     <div className="relative rounded-2xl border border-navy/15 bg-gradient-to-b from-white via-white to-navy-50/70 shadow-[0_10px_40px_-18px_rgba(15,42,84,0.35)]">
       {/* Brilho decorativo (recortado só aqui — não corta os dropdowns) */}
@@ -218,30 +260,87 @@ export default function CascadeFilter({
         <div className="absolute -top-28 left-1/2 h-56 w-[480px] -translate-x-1/2 rounded-full bg-gradient-to-r from-blue-500/20 via-navy/15 to-pink-400/20 blur-3xl" />
       </div>
 
-      {/* Header — centralizado */}
-      <div className="relative flex flex-col items-center gap-1.5 border-b border-navy/10 px-4 pb-3 pt-4 text-center sm:px-5 sm:pb-4 sm:pt-5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-navy to-blue-600 shadow-md shadow-navy/30 sm:h-9 sm:w-9">
-            <Filter className="h-4 w-4 text-white" />
+      {/* Header — destaque + trilha dos 3 passos (coluna central, linhas compactas) */}
+      <div className="relative overflow-hidden border-b border-navy/10 bg-gradient-to-r from-navy-50/80 via-white to-blue-50/60 px-4 pb-3 pt-3 text-center sm:px-6 sm:pb-3.5 sm:pt-4">
+        <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-400/70 to-transparent" />
+        <span className="pointer-events-none absolute -left-16 -top-20 h-40 w-40 rounded-full bg-blue-400/20 blur-2xl" />
+        <span className="pointer-events-none absolute -right-14 -bottom-24 h-44 w-44 rounded-full bg-emerald-300/15 blur-2xl" />
+
+        <div className="relative mx-auto flex max-w-xl flex-col items-center gap-1.5">
+          {/* Linha 1 — ícone + nome + badge, tudo no centro óptico */}
+          <div className="flex items-center justify-center gap-2.5">
+            {/* Ícone com anel pulsante enquanto nada filtrado → puxa o olhar */}
+            <span className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-navy to-blue-600 shadow-md shadow-navy/30 sm:h-9 sm:w-9">
+              {!hasFilter && (
+                <span className="absolute -inset-1 animate-pulse rounded-xl ring-2 ring-blue-400/60" />
+              )}
+              <Filter className="relative h-4 w-4 text-white" />
+            </span>
+            <h2 className="text-sm font-bold tracking-wide text-navy sm:text-base">
+              Filtro Cascata
+            </h2>
+            <span className="rounded-full bg-navy/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-navy/60">
+              3 níveis
+            </span>
           </div>
-          <div className="text-left">
-            <h2 className="text-sm font-bold tracking-wide text-navy">Filtro Cascata</h2>
-            <p className="text-[11px] text-muted-foreground">
-              Unidade <span className="text-navy/40">→</span> Equipe <span className="text-navy/40">→</span> Microárea
-            </p>
+
+          {/* Linha 2 — cobertura total do banco */}
+          <p className="text-[11px] leading-none text-muted-foreground tabular-nums">
+            {totals.unidades} unidades • {totals.equipes} equipes • {totals.micros} microáreas
+          </p>
+
+          {/* Linha 3 — trilha visual: feito, onde está, o que falta */}
+          <div className="mt-0.5 flex flex-wrap items-center justify-center gap-1.5">
+            {steps.map((s, i) => (
+              <Fragment key={s.label}>
+                {i > 0 && <span className="text-xs text-navy/30">→</span>}
+                <span
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-all",
+                    s.done && "border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm",
+                    !s.done && s.active && "animate-pulse border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-500/40",
+                    !s.done && !s.active && "border-navy/15 bg-white/70 text-navy/45",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold",
+                      s.done
+                        ? "bg-emerald-500 text-white"
+                        : s.active
+                          ? "bg-white/25 text-white"
+                          : "bg-navy/10 text-navy/50",
+                    )}
+                  >
+                    {s.done ? "✓" : s.n}
+                  </span>
+                  {s.label}
+                </span>
+              </Fragment>
+            ))}
           </div>
+
+          {/* Linha 4 — dica contextual (largura limitada → quebra simétrica) */}
+          <p className="max-w-lg text-xs leading-snug text-muted-foreground">
+            <span
+              className={cn(
+                "font-semibold",
+                trilhaCompleta ? "text-emerald-600" : "text-navy",
+              )}
+            >
+              {dica.strong}
+            </span>{" "}
+            {dica.rest}
+          </p>
         </div>
-        <p className="max-w-md text-xs text-muted-foreground">
-          <span className="font-semibold text-navy">Comece pela Unidade</span> — os cards e gráficos
-          acompanham cada escolha na hora.
-        </p>
+
         {hasFilter && (
           <button
             onClick={clearAll}
-            className="absolute right-3 top-3 flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100 sm:right-4 sm:top-4 sm:px-3"
+            className="absolute right-3 top-2.5 flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 ring-1 ring-inset ring-red-200 transition-all hover:-translate-y-0.5 hover:bg-red-100 hover:shadow-md sm:right-4 sm:top-3.5 sm:px-3"
           >
             <X className="h-3 w-3" />
-            Limpar filtros
+            <span className="hidden sm:inline">Limpar filtros</span>
           </button>
         )}
       </div>
