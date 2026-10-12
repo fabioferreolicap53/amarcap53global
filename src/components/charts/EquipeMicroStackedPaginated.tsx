@@ -7,6 +7,8 @@ import type { MetaBucket } from "@/types/amarcap53";
 
 interface Props {
   data: MetaBucket[];
+  /** "rose" = Outubro Rosa (padrão). "neutral" = versão sem tema de campanha. */
+  variant?: "rose" | "neutral";
 }
 
 interface MicroStat {
@@ -26,6 +28,12 @@ interface EquipeGroup {
 const ROSE_PALETTE = [
   "#e11d48", "#be123c", "#9f1239", "#db2777", "#c026d3", "#ec4899",
   "#f43f5e", "#d946ef", "#a21caf", "#fb7185", "#f472b6", "#e879f9",
+];
+
+// Paleta neutra (azuis/teal) — usada na variante sem tema de campanha.
+const NEUTRAL_PALETTE = [
+  "#1d4ed8", "#2563eb", "#3b82f6", "#0284c7", "#0ea5e9", "#0891b2",
+  "#0d9488", "#14b8a6", "#4f46e5", "#6366f1", "#7c3aed", "#8b5cf6",
 ];
 
 function parseEquipes(data: MetaBucket[]): EquipeGroup[] {
@@ -254,8 +262,29 @@ function buildOption(group: EquipeGroup, color: string) {
   };
 }
 
-export default function EquipeMicroStackedPaginated({ data }: Props) {
+export default function EquipeMicroStackedPaginated({ data, variant = "rose" }: Props) {
   const [page, setPage] = useState(0);
+
+  const isNeutral = variant === "neutral";
+  const palette = isNeutral ? NEUTRAL_PALETTE : ROSE_PALETTE;
+  const cardBorder = isNeutral ? "border-slate-200" : "border-rose-100";
+  const headerCls = isNeutral
+    ? "border-slate-200/70 bg-gradient-to-r from-slate-50 to-transparent"
+    : "border-rose-100/70 bg-gradient-to-r from-rose-50 to-transparent";
+  const iconCls = isNeutral
+    ? "from-blue-500 to-indigo-600 shadow-blue-200"
+    : "from-rose-500 to-pink-600 shadow-rose-200";
+  const legendBorder = isNeutral ? "border-slate-200" : "border-rose-200";
+  const dividerCls = isNeutral ? "divide-slate-200/60" : "divide-rose-100/60";
+  const pctCls = isNeutral ? "bg-slate-100 text-slate-600" : "bg-rose-50 text-rose-600";
+  const footerCls = isNeutral
+    ? "border-slate-200/60 bg-slate-50/40"
+    : "border-rose-100/60 bg-rose-50/40";
+  const dotActive = isNeutral ? "bg-blue-500" : "bg-rose-500";
+  const dotIdle = isNeutral ? "bg-blue-200 hover:bg-blue-300" : "bg-rose-200 hover:bg-rose-300";
+  const navBtnCls = isNeutral
+    ? "border-slate-200 text-slate-600 hover:bg-slate-50"
+    : "border-rose-200 text-rose-600 hover:bg-rose-50";
 
   useEffect(() => {
     setPage(0);
@@ -272,25 +301,25 @@ export default function EquipeMicroStackedPaginated({ data }: Props) {
   const charts = useMemo(
     () =>
       visible.map((group, gi) => {
-        const colorIdx = (page * itemsPerPage + gi) % ROSE_PALETTE.length;
+        const colorIdx = (page * itemsPerPage + gi) % palette.length;
         return {
           equipe: group.equipe,
           total: group.total,
           alcancado: group.alcancado,
           microCount: group.micros.length,
-          option: buildOption(group, ROSE_PALETTE[colorIdx]!),
-          color: ROSE_PALETTE[colorIdx],
+          option: buildOption(group, palette[colorIdx]!),
+          color: palette[colorIdx],
         };
       }),
-    [visible, page, itemsPerPage],
+    [visible, page, itemsPerPage, palette],
   );
 
   return (
-    <Card className="overflow-hidden border-rose-100 shadow-sm">
-      <CardHeader className="border-b border-rose-100/70 bg-gradient-to-r from-rose-50 to-transparent">
+    <Card className={`overflow-hidden ${cardBorder} shadow-sm`}>
+      <CardHeader className={`border-b ${headerCls}`}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-pink-600 shadow-md shadow-rose-200">
+            <div className={`flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${iconCls} shadow-md`}>
               <MapPin className="h-4 w-4 text-white" />
             </div>
             <div>
@@ -304,7 +333,7 @@ export default function EquipeMicroStackedPaginated({ data }: Props) {
               </p>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wide text-teal-700">
-                  Meta Outubro Rosa
+                  {isNeutral ? "Meta" : "Meta Outubro Rosa"}
                 </span>
                 <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-bold text-teal-700 ring-1 ring-teal-200 shadow-sm shadow-teal-100">
                   12 = BOM
@@ -317,7 +346,7 @@ export default function EquipeMicroStackedPaginated({ data }: Props) {
           </div>
           <div className="flex items-center gap-3">
             {/* Legenda do empilhamento */}
-            <div className="hidden items-center gap-3 rounded-full border border-rose-200 bg-white/70 px-3 py-1.5 sm:flex">
+            <div className={`hidden items-center gap-3 rounded-full border ${legendBorder} bg-white/70 px-3 py-1.5 sm:flex`}>
               <span className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
                 <span className="h-3 w-3 rounded-sm bg-gradient-to-r from-emerald-400 to-emerald-600 shadow-sm shadow-emerald-300/70" />
                 Alcançada(s)
@@ -334,7 +363,7 @@ export default function EquipeMicroStackedPaginated({ data }: Props) {
                   size="sm"
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
                   disabled={page === 0}
-                  className="h-8 w-8 border-rose-200 p-0 text-rose-600 hover:bg-rose-50"
+                  className={`h-8 w-8 p-0 ${navBtnCls}`}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -346,7 +375,7 @@ export default function EquipeMicroStackedPaginated({ data }: Props) {
                   size="sm"
                   onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                   disabled={page >= totalPages - 1}
-                  className="h-8 w-8 border-rose-200 p-0 text-rose-600 hover:bg-rose-50"
+                  className={`h-8 w-8 p-0 ${navBtnCls}`}
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -360,7 +389,7 @@ export default function EquipeMicroStackedPaginated({ data }: Props) {
         <div
           className={`grid ${
             isSingleMode ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
-          } divide-y divide-rose-100/60 md:divide-y-0 md:divide-x`}
+          } divide-y ${dividerCls} md:divide-y-0 md:divide-x`}
         >
           {charts.map((item) => {
             const chartHeight = Math.max(item.microCount * 26 + 40, 142);
@@ -385,7 +414,7 @@ export default function EquipeMicroStackedPaginated({ data }: Props) {
                     >
                       {item.total.toLocaleString("pt-BR")}
                     </span>
-                    <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-600">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${pctCls}`}>
                       {pct.toFixed(0)}%
                     </span>
                   </div>
@@ -399,13 +428,13 @@ export default function EquipeMicroStackedPaginated({ data }: Props) {
         </div>
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-1.5 border-t border-rose-100/60 bg-rose-50/40 py-3">
+          <div className={`flex items-center justify-center gap-1.5 border-t ${footerCls} py-3`}>
             {Array.from({ length: totalPages }, (_, i) => (
               <button
                 key={i}
                 onClick={() => setPage(i)}
                 className={`h-2 rounded-full transition-all duration-300 ${
-                  i === page ? "w-7 bg-rose-500" : "w-2 bg-rose-200 hover:bg-rose-300"
+                  i === page ? `w-7 ${dotActive}` : `w-2 ${dotIdle}`
                 }`}
               />
             ))}

@@ -9,6 +9,8 @@ import type { BucketCount, EstatisticasData, EstatisticasTab, FilterData, MetaRo
 const VIEW_CONSOLIDADO = "v_am53_consolidado";
 // Mesma estrutura do consolidado, filtrada no servidor por dna_hpv_gal de out/2026.
 const VIEW_OUTUBRO_ROSA = "v_am53_outubro_rosa";
+// Mesmas regras do Outubro Rosa, porém sem janela de data: dna_hpv_gal em qualquer data.
+const VIEW_PENDENTES = "v_am53_pendentes";
 
 interface ViewConsolidadoRecord {
   id: string;
@@ -20,13 +22,14 @@ interface ViewConsolidadoRecord {
   alcancado: number;
 }
 
-const CACHE_KEY = "amarcap53_views_v15";
+const CACHE_KEY = "amarcap53_views_v16";
 const CACHE_TTL = 30 * 60 * 1000; // 30 min
 
 interface CacheEntry {
   total: EstatisticasData;
   semCito: EstatisticasData;
   outubroRosaRows: MetaRow[];
+  pendentesRows: MetaRow[];
   filterData: FilterData;
   timestamp: number;
 }
@@ -141,7 +144,7 @@ function toBuckets(map: Map<string, number>): BucketCount[] {
 
 /** Busca a view consolidada. Um único request devolve total + semcito por
  *  unidade/equipe/microárea; todas as dimensões são derivadas destas linhas. */
-async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: EstatisticasData; outubroRosaRows: MetaRow[]; filterData: FilterData }> {
+async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: EstatisticasData; outubroRosaRows: MetaRow[]; pendentesRows: MetaRow[]; filterData: FilterData }> {
   const apiBase = import.meta.env.VITE_POCKETBASE_URL;
   const login = import.meta.env.VITE_POCKETBASE_LOGIN;
   const password = import.meta.env.VITE_POCKETBASE_PASSWORD;
@@ -165,10 +168,12 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
 
   let rows: ViewConsolidadoRecord[] = [];
   let octRows: ViewConsolidadoRecord[] = [];
+  let pendRows: ViewConsolidadoRecord[] = [];
   try {
-    [rows, octRows] = await Promise.all([
+    [rows, octRows, pendRows] = await Promise.all([
       load(token, VIEW_CONSOLIDADO),
       load(token, VIEW_OUTUBRO_ROSA),
+      load(token, VIEW_PENDENTES),
     ]);
   } catch {
     // token provavelmente expirado (401) — tenta re-auth abaixo
@@ -182,6 +187,7 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
       cacheToken(token2);
       rows = await load(token2, VIEW_CONSOLIDADO);
       octRows = await load(token2, VIEW_OUTUBRO_ROSA);
+      pendRows = await load(token2, VIEW_PENDENTES);
     } catch {
       // sem token válido: propaga para a UI (não cai no cache vazio)
       throw new Error("Falha ao autenticar no servidor de dados");
@@ -246,6 +252,16 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
     alcancado: r.alcancado ?? 0,
   }));
 
+  // Registros Pendentes ("Gestão de lista"): mesmas regras do Outubro Rosa,
+  // porém com dna_hpv_gal em qualquer data — sem janela de tempo.
+  const pendentesRows: MetaRow[] = pendRows.map((r) => ({
+    unidade: r.unidade || "Não informado",
+    equipe: r.equipe || "Não informado",
+    microarea: r.microarea,
+    total: r.total,
+    alcancado: r.alcancado ?? 0,
+  }));
+
   const filterData: FilterData = {
     unidades: Array.from(unidadesSet).sort(),
     equipes: Object.fromEntries(
@@ -257,7 +273,7 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
     totais,
   };
 
-  return { total, semCito, outubroRosaRows, filterData };
+  return { total, semCito, outubroRosaRows, pendentesRows, filterData };
 }
 
 export function useEstatisticas() {
@@ -266,6 +282,7 @@ export function useEstatisticas() {
   const [totalStats, setTotalStats] = useState<EstatisticasData | null>(null);
   const [semCitoStats, setSemCitoStats] = useState<EstatisticasData | null>(null);
   const [outubroRosaRows, setOutubroRosaRows] = useState<MetaRow[]>([]);
+  const [pendentesRows, setPendentesRows] = useState<MetaRow[]>([]);
   const [filterData, setFilterData] = useState<FilterData | null>(null);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
@@ -278,6 +295,7 @@ export function useEstatisticas() {
         setTotalStats(cached.total);
         setSemCitoStats(cached.semCito);
         setOutubroRosaRows(cached.outubroRosaRows);
+        setPendentesRows(cached.pendentesRows ?? []);
         setFilterData(cached.filterData);
         setLoading(false);
         return;
@@ -285,12 +303,13 @@ export function useEstatisticas() {
     }
 
     try {
-      const { total, semCito, outubroRosaRows: octRows, filterData: fd } = await fetchAllViews();
+      const { total, semCito, outubroRosaRows: octRows, pendentesRows: pendRows, filterData: fd } = await fetchAllViews();
       setTotalStats(total);
       setSemCitoStats(semCito);
       setOutubroRosaRows(octRows);
+      setPendentesRows(pendRows);
       setFilterData(fd);
-      saveCache({ total, semCito, outubroRosaRows: octRows, filterData: fd, timestamp: Date.now() });
+      saveCache({ total, semCito, outubroRosaRows: octRows, pendentesRows: pendRows, filterData: fd, timestamp: Date.now() });
     } catch (err) {
       console.error("[useEstatisticas] Error:", err);
       setError(err instanceof Error ? err.message : "Erro ao carregar dados");
@@ -315,5 +334,5 @@ export function useEstatisticas() {
 
   const emptyFilter: FilterData = { unidades: [], equipes: {}, microareas: {}, totais: {} };
 
-  return { loading, error, getStats, outubroRosaRows, filterData: filterData ?? emptyFilter, refetch: () => fetchData(true) };
+  return { loading, error, getStats, outubroRosaRows, pendentesRows, filterData: filterData ?? emptyFilter, refetch: () => fetchData(true) };
 }

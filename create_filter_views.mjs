@@ -14,6 +14,8 @@ const BLANK_3_FILTER = "(cito_lab = '' OR cito_lab IS NULL) AND (cito_pep = '' O
 // Colunas na ordem do covering index idx_am53_ue_micro_rast.
 // Filtro Outubro Rosa 2026: apenas registros cujo dna_hpv_gal cai em out/2026.
 const OUTUBRO_2026_FILTER = "dna_hpv_gal >= '2026-10-01' AND dna_hpv_gal < '2026-11-01'";
+// Filtro "qualquer data": dna_hpv_gal preenchida, sem janela de tempo.
+const GAL_FILLED_FILTER = "(dna_hpv_gal != '' AND dna_hpv_gal IS NOT NULL)";
 
 const BASE_FIELDS = [
   { name: "id", type: "text", required: true, primaryKey: true },
@@ -37,6 +39,15 @@ const views = [
     name: "v_am53_outubro_rosa",
     fields: [...BASE_FIELDS, { name: "alcancado", type: "number" }],
     query: `SELECT MIN(rowid) as id, unidade, equipe, microarea, count(*) as total, SUM(CASE WHEN (${SEM_CITO_FILTER}) AND (${OUTUBRO_2026_FILTER}) THEN 1 ELSE 0 END) as alcancado FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' AND ((${BLANK_3_FILTER}) OR (${OUTUBRO_2026_FILTER})) GROUP BY unidade, equipe, microarea ORDER BY total DESC`
+  },
+  {
+    // Registros Pendentes — mesmas regras do Outubro Rosa, porém sem a janela
+    // de data: "alcancado" considera dna_hpv_gal preenchida em QUALQUER data.
+    //   total    = 3 colunas em branco OU dna_hpv_gal preenchida (qualquer data)
+    //   alcancado = cito_lab e cito_pep em branco E dna_hpv_gal preenchida
+    name: "v_am53_pendentes",
+    fields: [...BASE_FIELDS, { name: "alcancado", type: "number" }],
+    query: `SELECT MIN(rowid) as id, unidade, equipe, microarea, count(*) as total, SUM(CASE WHEN (${SEM_CITO_FILTER}) AND (${GAL_FILLED_FILTER}) THEN 1 ELSE 0 END) as alcancado FROM amarcap53_pacientes WHERE unidade != '' AND equipe != '' AND ((${BLANK_3_FILTER}) OR (${GAL_FILLED_FILTER})) GROUP BY unidade, equipe, microarea ORDER BY total DESC`
   }
 ];
 

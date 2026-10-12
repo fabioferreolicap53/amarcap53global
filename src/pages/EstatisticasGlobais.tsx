@@ -1,16 +1,10 @@
 import { useState, useMemo, useEffect } from "react";
 import Footer from "@/components/layout/Footer";
-import SummaryCard from "@/components/charts/SummaryCard";
-import ExpandableBarChart from "@/components/charts/ExpandableBarChart";
-import EquipeMicroPaginated from "@/components/charts/EquipeMicroPaginated";
 import OutubroRosaPanel from "@/components/charts/OutubroRosaPanel";
+import PendentesPanel from "@/components/charts/PendentesPanel";
 import CascadeFilter from "@/components/filters/CascadeFilter";
 import { useEstatisticas } from "@/hooks/useEstatisticas";
 import {
-  BarChart3,
-  Building2,
-  Users,
-  MapPin,
   AlertTriangle,
   RefreshCw,
   Ribbon,
@@ -23,18 +17,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { pb } from "@/services";
 import { cn } from "@/lib/utils";
-import type { EstatisticasTab, EstatisticasData, BucketCount } from "@/types/amarcap53";
+import type { EstatisticasTab } from "@/types/amarcap53";
 
 const TABS: { key: EstatisticasTab; label: string; description: string }[] = [
   {
     key: "sem_cito",
     label: "Sem Cito / Registros Pendentes",
     description: "Gestão de lista",
-  },
-  {
-    key: "total",
-    label: "Total DNA-HPV",
-    description: "Todos os testes DNA-HPV registrados",
   },
   {
     key: "outubro_rosa",
@@ -146,7 +135,7 @@ async function saveLastUpdateRemote(value: string): Promise<void> {
 }
 
 export default function EstatisticasGlobais() {
-  const { loading, error, getStats, outubroRosaRows, filterData, refetch } = useEstatisticas();
+  const { loading, error, outubroRosaRows, pendentesRows, filterData, refetch } = useEstatisticas();
   const [activeTab, setActiveTab] = useState<EstatisticasTab>("outubro_rosa");
   const [selUnidade, setSelUnidade] = useState<string | null>(null);
   const [selEquipe, setSelEquipe] = useState<string | null>(null);
@@ -234,81 +223,7 @@ export default function EstatisticasGlobais() {
   }, [lastUpdate]);
 
   const isOutubro = activeTab === "outubro_rosa";
-  const rawStats = getStats(activeTab);
-  const tabLabel = TABS.find((t) => t.key === activeTab)?.label ?? "";
-
-  const stats = useMemo<EstatisticasData>(() => {
-    if (!selUnidade) return rawStats;
-
-    const { totais } = filterData;
-    const prefix = selUnidade;
-
-    // Filtrar porEquipe da view raw (match por label = unidade nos totais)
-    // Na verdade precisamos re-agregar do filterData totais
-    const equipeMap = new Map<string, number>();
-    const microList: BucketCount[] = [];
-    let totalGeral = 0;
-
-    if (selEquipe) {
-      // Unidade + Equipe: listar microáreas
-      if (selMicroarea != null) {
-        // Tudo filtrado — retorna só 1 registro
-        const key = `${prefix}|${selEquipe}|${selMicroarea}`;
-        const v = totais[key] ?? 0;
-        return {
-          totalGeral: v,
-          porEquipe: [{ label: selEquipe, count: v }],
-          porUnidade: [{ label: prefix, count: v }],
-          porEquipeMicroarea: [{ label: `${selEquipe} / Microárea ${selMicroarea}`, count: v }],
-        };
-      }
-      // Unidade + Equipe (todas microáreas)
-      const keyEq = `${prefix}|${selEquipe}`;
-      const totalEq = totais[keyEq] ?? 0;
-      for (const [k, v] of Object.entries(totais)) {
-        const parts = k.split("|");
-        if (parts[0] === prefix && parts[1] === selEquipe && parts.length === 3) {
-          microList.push({ label: `${selEquipe} / Microárea ${parts[2]!}`, count: v });
-          totalGeral += v;
-        }
-      }
-      microList.sort((a, b) => b.count - a.count);
-      return {
-        totalGeral: totalGeral || totalEq,
-        porEquipe: [{ label: selEquipe, count: totalEq }],
-        porUnidade: [{ label: prefix, count: totalEq }],
-        porEquipeMicroarea: microList,
-      };
-    }
-
-    // Só Unidade: listar equipes
-    for (const [k, v] of Object.entries(totais)) {
-      const parts = k.split("|");
-      if (parts[0] === prefix && parts.length === 2) {
-        equipeMap.set(parts[1]!, v);
-        totalGeral += v;
-      }
-    }
-    const equipes = Array.from(equipeMap.entries())
-      .map(([label, count]) => ({ label, count }))
-      .sort((a, b) => b.count - a.count);
-
-    // Microárea para todas as equipes da unidade
-    for (const [k, v] of Object.entries(totais)) {
-      const parts = k.split("|");
-      if (parts[0] === prefix && parts.length === 3) {
-        microList.push({ label: `${parts[1]!} / Microárea ${parts[2]!}`, count: v });
-      }
-    }
-    microList.sort((a, b) => b.count - a.count);
-
-    return {
-      totalGeral,
-      porEquipe: equipes,
-      porUnidade: [{ label: prefix, count: totalGeral }],
-      porEquipeMicroarea: microList,
-    };
-  }, [rawStats, selUnidade, selEquipe, selMicroarea, filterData]);
+  const isPendentes = activeTab === "sem_cito";
 
   return (
     <div className="min-h-screen bg-[#f4f6f9]">
@@ -542,62 +457,13 @@ export default function EstatisticasGlobais() {
           />
         )}
 
-        {/* ── Summary Cards ── */}
-        {!loading && !isOutubro && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryCard
-              title="Total DNA-HPV"
-              value={stats.totalGeral}
-              icon={BarChart3}
-              subtitle={tabLabel}
-            />
-            <SummaryCard
-              title="Equipes"
-              value={stats.porEquipe.length}
-              icon={Users}
-              subtitle={`${stats.porEquipe.length} equipe(s) distinta(s)`}
-              color="emerald"
-            />
-            <SummaryCard
-              title="Unidades"
-              value={stats.porUnidade.length}
-              icon={Building2}
-              subtitle={`${stats.porUnidade.length} unidade(s) distinta(s)`}
-              color="amber"
-            />
-            <SummaryCard
-              title="Combinações Equipe/Microárea"
-              value={stats.porEquipeMicroarea.length}
-              icon={MapPin}
-              subtitle="Dimensões distintas"
-              color="rose"
-            />
-          </div>
-        )}
-
-        {/* ── Charts Grid ── */}
-        {!loading && !isOutubro && (
-          <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-2">
-            <ExpandableBarChart
-              title="Testes DNA-HPV por Unidade"
-              subtitle={`Mostrando até 15 de ${stats.porUnidade.length} unidades`}
-              data={stats.porUnidade}
-              defaultShow={15}
-              height={460}
-            />
-            <ExpandableBarChart
-              title="Testes DNA-HPV por Equipe"
-              subtitle={`Mostrando até 15 de ${stats.porEquipe.length} equipes`}
-              data={stats.porEquipe}
-              defaultShow={15}
-              height={460}
-            />
-          </div>
-        )}
-
-        {!loading && !isOutubro && (
-          <EquipeMicroPaginated
-            data={stats.porEquipeMicroarea}
+        {/* ── Sem Cito / Registros Pendentes — Gestão de lista ── */}
+        {!loading && isPendentes && (
+          <PendentesPanel
+            rows={pendentesRows}
+            selUnidade={selUnidade}
+            selEquipe={selEquipe}
+            selMicroarea={selMicroarea}
           />
         )}
       </main>
