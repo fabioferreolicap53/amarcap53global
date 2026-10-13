@@ -76,8 +76,8 @@ function buildOption(group: EquipeGroup, color: string) {
         fontFamily: "Inter",
         fontWeight: "bold" as const,
         color: "#334155",
-        width: 60,
-        overflow: "truncate" as const,
+        // Sem width/overflow → "Microárea N" sempre legível por completo
+        formatter: (value: string) => value.replace(/^M\./, "Microárea "),
       },
       axisLine: { show: false },
       axisTick: { show: false },

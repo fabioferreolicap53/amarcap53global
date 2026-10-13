@@ -70,8 +70,8 @@ function buildStackedOption(data: MetaBucket[], rotate: number) {
         fontSize: 11,
         fontFamily: "Inter",
         color: "#64748b",
-        overflow: "truncate" as const,
-        width: 110,
+        width: 130,
+        overflow: "break" as const,
       },
       axisLine: { lineStyle: { color: "#e5e7eb" } },
       axisTick: { show: false },
@@ -263,7 +263,16 @@ const RANK_COLORS = [
 ];
 
 function buildRankingOption(data: MetaBucket[]) {
-  const labels = data.map((d, i) => `${i < 3 ? MEDALS[i] + " " : ""}${i + 1}º  ${d.label}`);
+  // Label em 1 linha: rank + EQUIPE + badge compacto "M.N" da microárea.
+  const labels = data.map((d, i) => {
+    const sep = d.label.indexOf(" / Microárea ");
+    const rank = `${i < 3 ? MEDALS[i] + " " : ""}${i + 1}º`;
+    if (sep === -1) return `{rank|${rank}  ${d.label}}`;
+    const equipe = d.label.slice(0, sep);
+    const micro = d.label.slice(sep + " / Microárea ".length);
+    const rankKey = i < 3 ? `r${i + 1}` : "rank";
+    return `{${rankKey}|${rank}  ${equipe}}  {micro|M${micro}}`;
+  });
   return {
     tooltip: {
       trigger: "axis" as const,
@@ -298,10 +307,53 @@ function buildRankingOption(data: MetaBucket[]) {
         fontSize: 11,
         fontFamily: "Inter",
         fontWeight: "bold" as const,
-        width: 185,
-        overflow: "truncate" as const,
-        color: (_value: string, index: number) =>
-          index < 3 ? RANK_LABEL_COLORS[index] : "#334155",
+        // 1 linha: rank/equipe + badge "M.N" inline, sem truncate
+        color: "#334155",
+        rich: {
+          rank: {
+            fontSize: 11,
+            fontWeight: "bold" as const,
+            fontFamily: "Inter",
+            color: "#334155",
+            align: "right" as const,
+            padding: [0, 6, 0, 0],
+          },
+          r1: {
+            fontSize: 11,
+            fontWeight: "bold" as const,
+            fontFamily: "Inter",
+            color: RANK_LABEL_COLORS[0],
+            align: "right" as const,
+            padding: [0, 6, 0, 0],
+          },
+          r2: {
+            fontSize: 11,
+            fontWeight: "bold" as const,
+            fontFamily: "Inter",
+            color: RANK_LABEL_COLORS[1],
+            align: "right" as const,
+            padding: [0, 6, 0, 0],
+          },
+          r3: {
+            fontSize: 11,
+            fontWeight: "bold" as const,
+            fontFamily: "Inter",
+            color: RANK_LABEL_COLORS[2],
+            align: "right" as const,
+            padding: [0, 6, 0, 0],
+          },
+          micro: {
+            fontSize: 9,
+            fontWeight: "bold" as const,
+            fontFamily: "Inter",
+            color: "#047857",
+            backgroundColor: "rgba(16,185,129,0.10)",
+            borderColor: "rgba(16,185,129,0.40)",
+            borderWidth: 1,
+            borderRadius: 7,
+            padding: [1, 5] as [number, number],
+          },
+        },
       },
       axisLine: { show: false },
       axisTick: { show: false },
