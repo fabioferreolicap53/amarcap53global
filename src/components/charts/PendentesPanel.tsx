@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -256,23 +256,46 @@ const rankGradient = (from: string, to: string) => ({
 const MEDALS = ["🥇", "🥈", "🥉"];
 const RANK_LABEL_COLORS = ["#b45309", "#64748b", "#c2410c"];
 
+// Label compacto p/ mobile: remove prefixo "SMS ", corta nome longo com "…"
+// (tooltip mantém nome completo).
+function compactLabel(label: string, max = 22): string {
+  const s = label.replace(/^SMS\s+/i, "");
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+// Largura de tela p/ ajuste responsivo dos eixos (ssr-safe).
+function useIsMobile(breakpoint = 640) {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < breakpoint,
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < breakpoint);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 const RANK_COLORS = [
   rankGradient("#fde68a", "#f59e0b"), // 🥇 ouro
   rankGradient("#e2e8f0", "#94a3b8"), // 🥈 prata
   rankGradient("#fed7aa", "#ea580c"), // 🥉 bronze
 ];
 
-function buildRankingOption(data: MetaBucket[]) {
+function buildRankingOption(data: MetaBucket[], isMobile = false) {
   // Label em 1 linha: rank + EQUIPE + badge compacto "M.N" da microárea.
+  // Mobile: nome compacto (prefixo "SMS " removido, corte com "…").
   const labels = data.map((d, i) => {
     const sep = d.label.indexOf(" / Microárea ");
     const rank = `${i < 3 ? MEDALS[i] + " " : ""}${i + 1}º`;
-    if (sep === -1) return `{rank|${rank}  ${d.label}}`;
-    const equipe = d.label.slice(0, sep);
+    if (sep === -1)
+      return `{rank|${rank}  ${isMobile ? compactLabel(d.label) : d.label}}`;
+    const equipe = isMobile ? compactLabel(d.label.slice(0, sep)) : d.label.slice(0, sep);
     const micro = d.label.slice(sep + " / Microárea ".length);
     const rankKey = i < 3 ? `r${i + 1}` : "rank";
     return `{${rankKey}|${rank}  ${equipe}}  {micro|M${micro}}`;
   });
+  const fs = isMobile ? 10 : 11;
   return {
     tooltip: {
       trigger: "axis" as const,
@@ -293,7 +316,7 @@ function buildRankingOption(data: MetaBucket[]) {
         );
       },
     },
-    grid: { left: 8, right: 68, top: 8, bottom: 4, containLabel: true },
+    grid: { left: 8, right: isMobile ? 42 : 68, top: 8, bottom: 4, containLabel: true },
     xAxis: {
       type: "value" as const,
       axisLabel: { fontSize: 10, fontFamily: "Inter", color: "#94a3b8" },
@@ -304,14 +327,14 @@ function buildRankingOption(data: MetaBucket[]) {
       data: labels,
       inverse: true,
       axisLabel: {
-        fontSize: 11,
+        fontSize: fs,
         fontFamily: "Inter",
         fontWeight: "bold" as const,
         // 1 linha: rank/equipe + badge "M.N" inline, sem truncate
         color: "#334155",
         rich: {
           rank: {
-            fontSize: 11,
+            fontSize: fs,
             fontWeight: "bold" as const,
             fontFamily: "Inter",
             color: "#334155",
@@ -319,7 +342,7 @@ function buildRankingOption(data: MetaBucket[]) {
             padding: [0, 6, 0, 0],
           },
           r1: {
-            fontSize: 11,
+            fontSize: fs,
             fontWeight: "bold" as const,
             fontFamily: "Inter",
             color: RANK_LABEL_COLORS[0],
@@ -327,7 +350,7 @@ function buildRankingOption(data: MetaBucket[]) {
             padding: [0, 6, 0, 0],
           },
           r2: {
-            fontSize: 11,
+            fontSize: fs,
             fontWeight: "bold" as const,
             fontFamily: "Inter",
             color: RANK_LABEL_COLORS[1],
@@ -335,7 +358,7 @@ function buildRankingOption(data: MetaBucket[]) {
             padding: [0, 6, 0, 0],
           },
           r3: {
-            fontSize: 11,
+            fontSize: fs,
             fontWeight: "bold" as const,
             fontFamily: "Inter",
             color: RANK_LABEL_COLORS[2],
@@ -421,7 +444,9 @@ function RankingChart({
     [data, limit],
   );
 
-  const option = useMemo(() => buildRankingOption(ranked), [ranked]);
+  const isMobile = useIsMobile();
+
+  const option = useMemo(() => buildRankingOption(ranked, isMobile), [ranked, isMobile]);
   const totalAlc = ranked.reduce((s, d) => s + d.alcancado, 0);
   const totalLista = ranked.reduce((s, d) => s + d.total, 0);
   const pctRank = totalLista > 0 ? (totalAlc / totalLista) * 100 : 0;
