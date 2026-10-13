@@ -497,7 +497,7 @@ function RankingChart({
         ) : (
           <div
             className={
-              expanded
+              expanded && expandScroll
                 ? "max-h-[640px] overflow-y-auto overscroll-contain rounded-lg pr-1"
                 : ""
             }
@@ -756,6 +756,7 @@ export default function PendentesPanel({ rows, selUnidade, selEquipe, selMicroar
             icon={Crown}
             iconClass="from-amber-400 to-yellow-500 shadow-amber-200/70"
             itemLabel="unidades"
+            expandScroll={false}
           />
           <RankingChart
             title="Top 20 equipes — mulheres alcançadas"
