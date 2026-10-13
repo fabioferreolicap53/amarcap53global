@@ -426,6 +426,8 @@ function RankingChart({
   height = 340,
   icon: Icon = Trophy,
   iconClass = "from-amber-400 to-orange-500 shadow-amber-200/70",
+  itemLabel = "itens",
+  expandScroll = true,
 }: {
   title: string;
   subtitle: string;
@@ -434,19 +436,30 @@ function RankingChart({
   height?: number;
   icon?: React.ElementType;
   iconClass?: string;
+  itemLabel?: string;
+  expandScroll?: boolean;
 }) {
-  const ranked = useMemo(
-    () =>
-      data
-        .filter((d) => d.alcancado > 0)
-        .sort((a, b) => b.alcancado - a.alcancado)
-        .slice(0, limit),
-    [data, limit],
-  );
-
+  const [expanded, setExpanded] = useState(false);
   const isMobile = useIsMobile();
 
+  const allRanked = useMemo(
+    () => data.filter((d) => d.alcancado > 0).sort((a, b) => b.alcancado - a.alcancado),
+    [data],
+  );
+
+  const canExpand = allRanked.length > limit;
+  const ranked = useMemo(
+    () => (expanded ? allRanked : allRanked.slice(0, limit)),
+    [allRanked, expanded, limit],
+  );
+
   const option = useMemo(() => buildRankingOption(ranked, isMobile), [ranked, isMobile]);
+
+  // Expandido: 1 linha confortável por item (26px desktop / 28px mobile);
+  // acima de ~640px o próprio card rola — nada de barras espremidas.
+  const rowH = isMobile ? 28 : 26;
+  const chartHeight = expanded ? allRanked.length * rowH + 40 : height;
+
   const totalAlc = ranked.reduce((s, d) => s + d.alcancado, 0);
   const totalLista = ranked.reduce((s, d) => s + d.total, 0);
   const pctRank = totalLista > 0 ? (totalAlc / totalLista) * 100 : 0;
@@ -470,7 +483,7 @@ function RankingChart({
             <span className="rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 px-3 py-1 text-[11px] font-bold text-white shadow-sm shadow-emerald-300/70">
               {fmt(totalAlc)} alcançadas
             </span>
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-sky-600/80">
               {pctRank.toFixed(1)}% do ranking
             </span>
           </div>
@@ -482,7 +495,48 @@ function RankingChart({
             Nenhuma mulher alcançada para o filtro selecionado.
           </div>
         ) : (
-          <ReactECharts option={option} notMerge style={{ height }} />
+          <div
+            className={
+              expanded
+                ? "max-h-[640px] overflow-y-auto overscroll-contain rounded-lg pr-1"
+                : ""
+            }
+          >
+            <ReactECharts
+              key={expanded ? "all" : "top"}
+              option={option}
+              notMerge
+              style={{ height: chartHeight }}
+            />
+          </div>
+        )}
+
+        {canExpand && (
+          <div className="mt-3 flex flex-col items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setExpanded((v) => !v)}
+              className="gap-1.5 rounded-full border-slate-200 bg-white/80 text-sky-700 shadow-sm transition-colors hover:bg-sky-50"
+            >
+              {expanded ? (
+                <>
+                  <ChevronUp className="h-3.5 w-3.5" />
+                  Mostrar apenas o Top {limit}
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                  Ver todas as {allRanked.length} {itemLabel}
+                </>
+              )}
+            </Button>
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              {expanded
+                ? `Exibindo ${allRanked.length} de ${allRanked.length}`
+                : `Exibindo ${ranked.length} de ${allRanked.length}`}
+            </span>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -701,6 +755,7 @@ export default function PendentesPanel({ rows, selUnidade, selEquipe, selMicroar
             height={340}
             icon={Crown}
             iconClass="from-amber-400 to-yellow-500 shadow-amber-200/70"
+            itemLabel="unidades"
           />
           <RankingChart
             title="Top 20 equipes — mulheres alcançadas"
@@ -710,6 +765,7 @@ export default function PendentesPanel({ rows, selUnidade, selEquipe, selMicroar
             height={340}
             icon={Medal}
             iconClass="from-emerald-400 to-teal-500 shadow-emerald-200/70"
+            itemLabel="equipes"
           />
         </div>
 
@@ -721,6 +777,7 @@ export default function PendentesPanel({ rows, selUnidade, selEquipe, selMicroar
           height={640}
           icon={Award}
           iconClass="from-blue-400 to-indigo-500 shadow-blue-200/70"
+          itemLabel="combinações"
         />
       </section>
     </div>
