@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { BucketCount, EstatisticasData, EstatisticasTab, FilterData, MetaRow } from "@/types/amarcap53";
 
 // UMA única view consolidada: devolve `total` E `semcito` agrupados por
@@ -59,6 +59,15 @@ function saveCache(data: CacheEntry): void {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Erro de autenticação (HTTP 401). Sobe até o chamador para re-autenticar
+ *  UMA vez, em vez de gastar 3 retries cegos por view. */
+class AuthError extends Error {
+  constructor() {
+    super("Não autorizado (401)");
+    this.name = "AuthError";
+  }
+}
+
 /** Busca uma view com paginação automática. Lança erro se não conseguir carregar nada. */
 async function fetchView<T extends { id: string }>(
   apiBase: string,
@@ -72,7 +81,8 @@ async function fetchView<T extends { id: string }>(
   for (;;) {
     let data: { items: T[] } | null = null;
 
-    // 3 tentativas por página
+    // 3 tentativas por página (cobre instabilidade de rede). 401 NÃO é
+    // retentado: propaga AuthError para o re-auth único do chamador.
     for (let attempt = 1; attempt <= 3 && !data; attempt++) {
       try {
         // skipTotal=1: pula o COUNT(*) da view (que roda o GROUP BY 2×) —
@@ -81,12 +91,14 @@ async function fetchView<T extends { id: string }>(
           `${apiBase}/api/collections/${viewName}/records?page=${page}&perPage=${perPage}&skipTotal=1`,
           { headers, signal: AbortSignal.timeout(45000) },
         );
+        if (resp.status === 401) throw new AuthError();
         if (resp.ok) {
           data = await resp.json() as { items: T[] };
         } else if (attempt < 3) {
           await sleep(500 * attempt);
         }
-      } catch {
+      } catch (err) {
+        if (err instanceof AuthError) throw err;
         if (attempt < 3) await sleep(500 * attempt);
       }
     }
@@ -142,9 +154,18 @@ function toBuckets(map: Map<string, number>): BucketCount[] {
     .sort((a, b) => b.count - a.count);
 }
 
+/** Resultado completo da leitura (1 auth + 3 views). */
+interface ViewsPayload {
+  total: EstatisticasData;
+  semCito: EstatisticasData;
+  outubroRosaRows: MetaRow[];
+  pendentesRows: MetaRow[];
+  filterData: FilterData;
+}
+
 /** Busca a view consolidada. Um único request devolve total + semcito por
  *  unidade/equipe/microárea; todas as dimensões são derivadas destas linhas. */
-async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: EstatisticasData; outubroRosaRows: MetaRow[]; pendentesRows: MetaRow[]; filterData: FilterData }> {
+async function fetchAllViews(): Promise<ViewsPayload> {
   const apiBase = import.meta.env.VITE_POCKETBASE_URL;
   const login = import.meta.env.VITE_POCKETBASE_LOGIN;
   const password = import.meta.env.VITE_POCKETBASE_PASSWORD;
@@ -169,28 +190,32 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
   let rows: ViewConsolidadoRecord[] = [];
   let octRows: ViewConsolidadoRecord[] = [];
   let pendRows: ViewConsolidadoRecord[] = [];
-  try {
-    [rows, octRows, pendRows] = await Promise.all([
-      load(token, VIEW_CONSOLIDADO),
-      load(token, VIEW_OUTUBRO_ROSA),
-      load(token, VIEW_PENDENTES),
-    ]);
-  } catch {
-    // token provavelmente expirado (401) — tenta re-auth abaixo
-  }
 
-  // Se a view voltou vazia/erro, o token pode ter expirado → re-auth
-  if (rows.length === 0) {
-    try { localStorage.removeItem(AUTH_CACHE_KEY); } catch { /* ignore */ }
-    try {
-      const token2 = await authRequest(apiBase, login, password);
+  const loadAll = (t: string) =>
+    Promise.all([
+      load(t, VIEW_CONSOLIDADO),
+      load(t, VIEW_OUTUBRO_ROSA),
+      load(t, VIEW_PENDENTES),
+    ]);
+
+  // Uma única rodada de auth: se o token expirou (401), re-autentica UMA vez
+  // e repete. Sem retries redundantes por view.
+  try {
+    [rows, octRows, pendRows] = await loadAll(token);
+  } catch (err) {
+    if (err instanceof AuthError) {
+      try { localStorage.removeItem(AUTH_CACHE_KEY); } catch { /* ignore */ }
+      let token2: string;
+      try {
+        token2 = await authRequest(apiBase, login, password);
+      } catch {
+        // sem token válido: propaga para a UI (não cai no cache vazio)
+        throw new Error("Falha ao autenticar no servidor de dados");
+      }
       cacheToken(token2);
-      rows = await load(token2, VIEW_CONSOLIDADO);
-      octRows = await load(token2, VIEW_OUTUBRO_ROSA);
-      pendRows = await load(token2, VIEW_PENDENTES);
-    } catch {
-      // sem token válido: propaga para a UI (não cai no cache vazio)
-      throw new Error("Falha ao autenticar no servidor de dados");
+      [rows, octRows, pendRows] = await loadAll(token2);
+    } else {
+      throw err;
     }
   }
 
@@ -276,6 +301,20 @@ async function fetchAllViews(): Promise<{ total: EstatisticasData; semCito: Esta
   return { total, semCito, outubroRosaRows, pendentesRows, filterData };
 }
 
+// Single-flight: chamadas concorrentes (StrictMode monta efeitos 2× em dev,
+// ou mais de um componente usando o hook) compartilham UMA única rodada de
+// rede em vez de disparar auth + 3 views duplicados.
+let inFlight: Promise<ViewsPayload> | null = null;
+
+function fetchAllViewsShared(): Promise<ViewsPayload> {
+  if (!inFlight) {
+    inFlight = fetchAllViews().finally(() => {
+      inFlight = null;
+    });
+  }
+  return inFlight;
+}
+
 export function useEstatisticas() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -285,13 +324,22 @@ export function useEstatisticas() {
   const [pendentesRows, setPendentesRows] = useState<MetaRow[]>([]);
   const [filterData, setFilterData] = useState<FilterData | null>(null);
 
+  // Race guard: cada fetch recebe um número de versão; resultados de uma
+  // chamada antiga (ex.: remontagem/refetch concorrente) são descartados e não
+  // sobrescrevem/apagam o estado do fetch mais recente.
+  const versionRef = useRef(0);
+
   const fetchData = useCallback(async (forceRefresh = false) => {
+    const version = ++versionRef.current;
+    const isStale = () => version !== versionRef.current;
+
     setLoading(true);
     setError(null);
 
     if (!forceRefresh) {
       const cached = loadCache();
       if (cached) {
+        if (isStale()) return;
         setTotalStats(cached.total);
         setSemCitoStats(cached.semCito);
         setOutubroRosaRows(cached.outubroRosaRows);
@@ -303,7 +351,8 @@ export function useEstatisticas() {
     }
 
     try {
-      const { total, semCito, outubroRosaRows: octRows, pendentesRows: pendRows, filterData: fd } = await fetchAllViews();
+      const { total, semCito, outubroRosaRows: octRows, pendentesRows: pendRows, filterData: fd } = await fetchAllViewsShared();
+      if (isStale()) return;
       setTotalStats(total);
       setSemCitoStats(semCito);
       setOutubroRosaRows(octRows);
@@ -311,10 +360,11 @@ export function useEstatisticas() {
       setFilterData(fd);
       saveCache({ total, semCito, outubroRosaRows: octRows, pendentesRows: pendRows, filterData: fd, timestamp: Date.now() });
     } catch (err) {
+      if (isStale()) return;
       console.error("[useEstatisticas] Error:", err);
       setError(err instanceof Error ? err.message : "Erro ao carregar dados");
     } finally {
-      setLoading(false);
+      if (!isStale()) setLoading(false);
     }
   }, []);
 

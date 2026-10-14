@@ -2,6 +2,34 @@ const POCKETBASE_URL = import.meta.env.VITE_POCKETBASE_URL || "http://127.0.0.1:
 const POCKETBASE_LOGIN = import.meta.env.VITE_POCKETBASE_LOGIN || "";
 const POCKETBASE_PASSWORD = import.meta.env.VITE_POCKETBASE_PASSWORD || "";
 
+// Cache de token compartilhado com o hook useEstatisticas (MESMA chave e shape).
+// Assim, quem autentica primeiro serve o token para o outro — evitando uma
+// segunda autenticação (round-trip) no mesmo carregamento de página.
+const AUTH_CACHE_KEY = "amarcap53_pb_auth";
+const AUTH_TTL_MS = 25 * 60 * 1000; // 25 min
+
+function readCachedToken(): string | null {
+  try {
+    const raw = localStorage.getItem(AUTH_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { token?: string; expires?: number };
+    if (parsed?.token && parsed?.expires && Date.now() < parsed.expires) {
+      return parsed.token;
+    }
+  } catch { /* storage indisponível */ }
+  return null;
+}
+
+function writeCachedToken(token: string): void {
+  try {
+    localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({ token, expires: Date.now() + AUTH_TTL_MS }));
+  } catch { /* quota/indisponível */ }
+}
+
+function clearCachedToken(): void {
+  try { localStorage.removeItem(AUTH_CACHE_KEY); } catch { /* ignore */ }
+}
+
 interface PocketBaseResponse<T> {
   page: number;
   perPage: number;
@@ -49,10 +77,45 @@ class PocketBaseClient {
 
   private async ensureAuth(): Promise<void> {
     if (this.token) return;
+    // Reaproveita o token já autenticado (ex.: pelo useEstatisticas) antes de
+    // disparar uma nova autenticação.
+    const cached = readCachedToken();
+    if (cached) {
+      this.token = cached;
+      return;
+    }
     if (!this.authPromise) {
-      this.authPromise = this.authenticate();
+      this.authPromise = this.authenticate().catch((err) => {
+        this.authPromise = null; // permite nova tentativa após falha
+        throw err;
+      });
     }
     await this.authPromise;
+  }
+
+  /** Limpa o token (memória + cache compartilhado) para forçar re-auth. */
+  private resetAuth(): void {
+    this.token = null;
+    this.authPromise = null;
+    clearCachedToken();
+  }
+
+  /** Executa a request autenticada; em 401 re-autentica UMA vez e repete. */
+  private async fetchWithAuth(url: string, init: RequestInit): Promise<Response> {
+    await this.ensureAuth();
+    const doFetch = () =>
+      fetch(url, {
+        ...init,
+        headers: { ...((init.headers as Record<string, string>) ?? {}), ...this.authHeaders() },
+      });
+
+    let response = await doFetch();
+    if (response.status === 401) {
+      this.resetAuth();
+      await this.ensureAuth();
+      response = await doFetch();
+    }
+    return response;
   }
 
   private async authenticate(): Promise<void> {
@@ -77,6 +140,7 @@ class PocketBaseClient {
 
     const data = (await response.json()) as AuthResponse;
     this.token = data.token;
+    writeCachedToken(data.token);
   }
 
   private authHeaders(): Record<string, string> {
@@ -107,30 +171,12 @@ class PocketBaseClient {
     collection: string,
     params: QueryParams = {},
   ): Promise<PocketBaseResponse<T>> {
-    await this.ensureAuth();
     const perPage = Math.min(params.perPage ?? 30, 300);
     const page = params.page ?? 1;
     const basePath = `${this.baseUrl}/api/collections/${collection}/records`;
     const url = this.buildUrl(basePath, { ...params, page, perPage });
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: this.authHeaders(),
-    });
-
-    if (response.status === 401) {
-      this.token = null;
-      this.authPromise = null;
-      await this.ensureAuth();
-      const retry = await fetch(url, {
-        method: "GET",
-        headers: this.authHeaders(),
-      });
-      if (!retry.ok) {
-        throw new Error(`PocketBase error: ${retry.status} ${retry.statusText}`);
-      }
-      return retry.json() as Promise<PocketBaseResponse<T>>;
-    }
+    const response = await this.fetchWithAuth(url, { method: "GET" });
 
     if (!response.ok) {
       const body = await response.text().catch(() => "no body");
@@ -146,14 +192,10 @@ class PocketBaseClient {
     id: string,
     params: { expand?: string; fields?: string } = {},
   ): Promise<T> {
-    await this.ensureAuth();
     const basePath = `${this.baseUrl}/api/collections/${collection}/records/${id}`;
     const url = this.buildUrl(basePath, params);
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: this.authHeaders(),
-    });
+    const response = await this.fetchWithAuth(url, { method: "GET" });
 
     if (!response.ok) {
       throw new Error(`PocketBase error: ${response.status} ${response.statusText}`);
@@ -166,12 +208,10 @@ class PocketBaseClient {
     collection: string,
     data: Partial<Omit<T, "id" | "created" | "updated" | "collectionId" | "collectionName">>,
   ): Promise<T> {
-    await this.ensureAuth();
     const url = `${this.baseUrl}/api/collections/${collection}/records`;
 
-    const response = await fetch(url, {
+    const response = await this.fetchWithAuth(url, {
       method: "POST",
-      headers: this.authHeaders(),
       body: JSON.stringify(data),
     });
 
@@ -187,12 +227,10 @@ class PocketBaseClient {
     id: string,
     data: Partial<Omit<T, "id" | "created" | "updated" | "collectionId" | "collectionName">>,
   ): Promise<T> {
-    await this.ensureAuth();
     const url = `${this.baseUrl}/api/collections/${collection}/records/${id}`;
 
-    const response = await fetch(url, {
+    const response = await this.fetchWithAuth(url, {
       method: "PATCH",
-      headers: this.authHeaders(),
       body: JSON.stringify(data),
     });
 
@@ -204,13 +242,9 @@ class PocketBaseClient {
   }
 
   async delete(collection: string, id: string): Promise<boolean> {
-    await this.ensureAuth();
     const url = `${this.baseUrl}/api/collections/${collection}/records/${id}`;
 
-    const response = await fetch(url, {
-      method: "DELETE",
-      headers: this.authHeaders(),
-    });
+    const response = await this.fetchWithAuth(url, { method: "DELETE" });
 
     if (!response.ok) {
       throw new Error(`PocketBase error: ${response.status} ${response.statusText}`);
