@@ -63,6 +63,14 @@ export interface MetaBucket {
   alcancado: number;
 }
 
+/** Linha da view `v_am53_timeline_unidades`: mulheres alcançadas por unidade,
+ *  agrupadas pela data do exame (data_ref) — base temporal das importações. */
+export interface TimelineUnidadeRow {
+  unidade: string;
+  data_ref: string; // ISO yyyy-mm-dd
+  alcancado: number;
+}
+
 /** Dados agregados da aba Outubro Rosa 2026 ("Gestão de lista"). */
 export interface OutubroRosaData {
   totalGeral: number;

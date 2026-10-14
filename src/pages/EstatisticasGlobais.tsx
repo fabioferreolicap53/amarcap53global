@@ -163,7 +163,7 @@ async function saveLastUpdateRemote(value: string): Promise<void> {
 }
 
 export default function EstatisticasGlobais() {
-  const { loading, error, outubroRosaRows, pendentesRows, filterData, refetch } = useEstatisticas();
+  const { loading, error, outubroRosaRows, pendentesRows, timelineRows, filterData, refetch } = useEstatisticas();
   const [activeTab, setActiveTab] = useState<EstatisticasTab>(readActiveTab);
 
   // Persiste a aba escolhida → F5 mantém o usuário onde estava
@@ -517,6 +517,7 @@ export default function EstatisticasGlobais() {
         {!loading && isOutubro && (
           <OutubroRosaPanel
             rows={outubroRosaRows}
+            timeline={timelineRows}
             selUnidade={selUnidade}
             selEquipe={selEquipe}
             selMicroarea={selMicroarea}
@@ -527,6 +528,7 @@ export default function EstatisticasGlobais() {
         {!loading && isPendentes && (
           <PendentesPanel
             rows={pendentesRows}
+            timeline={timelineRows}
             selUnidade={selUnidade}
             selEquipe={selEquipe}
             selMicroarea={selMicroarea}

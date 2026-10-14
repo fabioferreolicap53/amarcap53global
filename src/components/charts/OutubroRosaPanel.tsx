@@ -4,10 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Ribbon, ChevronDown, ChevronUp, Target, TrendingUp, ListChecks, Trophy, Crown, Medal, Award, Percent } from "lucide-react";
 import EquipeMicroStackedPaginated from "@/components/charts/EquipeMicroStackedPaginated";
-import type { MetaBucket, MetaRow } from "@/types/amarcap53";
+import TimelineUnidadesChart from "@/components/charts/TimelineUnidadesChart";
+import type { MetaBucket, MetaRow, TimelineUnidadeRow } from "@/types/amarcap53";
 
 interface Props {
   rows: MetaRow[];
+  timeline: TimelineUnidadeRow[];
   selUnidade: string | null;
   selEquipe: string | null;
   selMicroarea: number | null;
@@ -543,7 +545,7 @@ function RankingChart({
   );
 }
 
-export default function OutubroRosaPanel({ rows, selUnidade, selEquipe, selMicroarea }: Props) {
+export default function OutubroRosaPanel({ rows, timeline, selUnidade, selEquipe, selMicroarea }: Props) {
   const { porUnidade, porEquipe, porEquipeMicroarea, totalGeral, alcancadoGeral } = useMemo(() => {
     const filtered = rows.filter((r) => {
       if (selUnidade && r.unidade !== selUnidade) return false;
@@ -721,6 +723,14 @@ export default function OutubroRosaPanel({ rows, selUnidade, selEquipe, selMicro
           </div>
         </div>
       </div>
+
+      {/* ── Linha temporal: evolução diária por unidade ── */}
+      <TimelineUnidadesChart
+        rows={timeline}
+        variant="rose"
+        selUnidade={selUnidade}
+        windowStart="2026-10-01"
+      />
 
       {/* ── Colunas empilhadas: Total / Alcançado / A alcançar ── */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">

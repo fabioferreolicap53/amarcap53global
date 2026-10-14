@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { BucketCount, EstatisticasData, EstatisticasTab, FilterData, MetaRow } from "@/types/amarcap53";
+import type { BucketCount, EstatisticasData, EstatisticasTab, FilterData, MetaRow, TimelineUnidadeRow } from "@/types/amarcap53";
 
 // UMA única view consolidada: devolve `total` E `semcito` agrupados por
 // unidade+equipe+microárea. Todas as dimensões exibidas no frontend são
@@ -11,6 +11,10 @@ const VIEW_CONSOLIDADO = "v_am53_consolidado";
 const VIEW_OUTUBRO_ROSA = "v_am53_outubro_rosa";
 // Mesmas regras do Outubro Rosa, porém sem janela de data: dna_hpv_gal em qualquer data.
 const VIEW_PENDENTES = "v_am53_pendentes";
+// Série temporal (histórico completo): mulheres alcançadas (cito em branco +
+// dna_hpv_gal preenchida) por unidade, agrupadas pela data do exame — eixo
+// temporal dos momentos de atualização. Sem janela de data: cada aba recorta.
+const VIEW_TIMELINE = "v_am53_timeline_unidades";
 
 interface ViewConsolidadoRecord {
   id: string;
@@ -22,7 +26,14 @@ interface ViewConsolidadoRecord {
   alcancado: number;
 }
 
-const CACHE_KEY = "amarcap53_views_v16";
+interface TimelineRecord {
+  id: string;
+  unidade: string;
+  data_ref: string;
+  alcancado: number;
+}
+
+const CACHE_KEY = "amarcap53_views_v18";
 const CACHE_TTL = 30 * 60 * 1000; // 30 min
 
 interface CacheEntry {
@@ -30,6 +41,7 @@ interface CacheEntry {
   semCito: EstatisticasData;
   outubroRosaRows: MetaRow[];
   pendentesRows: MetaRow[];
+  timelineRows: TimelineUnidadeRow[];
   filterData: FilterData;
   timestamp: number;
 }
@@ -75,7 +87,7 @@ async function fetchView<T extends { id: string }>(
   viewName: string,
 ): Promise<T[]> {
   const all: T[] = [];
-  const perPage = 1000; // 1 request cobre a view inteira (656 linhas)
+  const perPage = 1000; // paginação automática (consolidado cabe em 1 request)
   let page = 1;
 
   for (;;) {
@@ -154,12 +166,13 @@ function toBuckets(map: Map<string, number>): BucketCount[] {
     .sort((a, b) => b.count - a.count);
 }
 
-/** Resultado completo da leitura (1 auth + 3 views). */
+/** Resultado completo da leitura (1 auth + 4 views). */
 interface ViewsPayload {
   total: EstatisticasData;
   semCito: EstatisticasData;
   outubroRosaRows: MetaRow[];
   pendentesRows: MetaRow[];
+  timelineRows: TimelineUnidadeRow[];
   filterData: FilterData;
 }
 
@@ -190,18 +203,20 @@ async function fetchAllViews(): Promise<ViewsPayload> {
   let rows: ViewConsolidadoRecord[] = [];
   let octRows: ViewConsolidadoRecord[] = [];
   let pendRows: ViewConsolidadoRecord[] = [];
+  let timelineRaw: TimelineRecord[] = [];
 
   const loadAll = (t: string) =>
     Promise.all([
       load(t, VIEW_CONSOLIDADO),
       load(t, VIEW_OUTUBRO_ROSA),
       load(t, VIEW_PENDENTES),
+      fetchView<TimelineRecord>(apiBase, { Authorization: t }, VIEW_TIMELINE),
     ]);
 
   // Uma única rodada de auth: se o token expirou (401), re-autentica UMA vez
   // e repete. Sem retries redundantes por view.
   try {
-    [rows, octRows, pendRows] = await loadAll(token);
+    [rows, octRows, pendRows, timelineRaw] = await loadAll(token);
   } catch (err) {
     if (err instanceof AuthError) {
       try { localStorage.removeItem(AUTH_CACHE_KEY); } catch { /* ignore */ }
@@ -213,7 +228,7 @@ async function fetchAllViews(): Promise<ViewsPayload> {
         throw new Error("Falha ao autenticar no servidor de dados");
       }
       cacheToken(token2);
-      [rows, octRows, pendRows] = await loadAll(token2);
+      [rows, octRows, pendRows, timelineRaw] = await loadAll(token2);
     } else {
       throw err;
     }
@@ -287,6 +302,13 @@ async function fetchAllViews(): Promise<ViewsPayload> {
     alcancado: r.alcancado ?? 0,
   }));
 
+  // Série temporal por unidade (mulheres alcançadas por data do exame).
+  const timelineRows: TimelineUnidadeRow[] = timelineRaw.map((r) => ({
+    unidade: r.unidade || "Não informado",
+    data_ref: r.data_ref,
+    alcancado: r.alcancado ?? 0,
+  }));
+
   const filterData: FilterData = {
     unidades: Array.from(unidadesSet).sort(),
     equipes: Object.fromEntries(
@@ -298,7 +320,7 @@ async function fetchAllViews(): Promise<ViewsPayload> {
     totais,
   };
 
-  return { total, semCito, outubroRosaRows, pendentesRows, filterData };
+  return { total, semCito, outubroRosaRows, pendentesRows, timelineRows, filterData };
 }
 
 // Single-flight: chamadas concorrentes (StrictMode monta efeitos 2× em dev,
@@ -322,6 +344,7 @@ export function useEstatisticas() {
   const [semCitoStats, setSemCitoStats] = useState<EstatisticasData | null>(null);
   const [outubroRosaRows, setOutubroRosaRows] = useState<MetaRow[]>([]);
   const [pendentesRows, setPendentesRows] = useState<MetaRow[]>([]);
+  const [timelineRows, setTimelineRows] = useState<TimelineUnidadeRow[]>([]);
   const [filterData, setFilterData] = useState<FilterData | null>(null);
 
   // Race guard: cada fetch recebe um número de versão; resultados de uma
@@ -344,6 +367,7 @@ export function useEstatisticas() {
         setSemCitoStats(cached.semCito);
         setOutubroRosaRows(cached.outubroRosaRows);
         setPendentesRows(cached.pendentesRows ?? []);
+        setTimelineRows(cached.timelineRows ?? []);
         setFilterData(cached.filterData);
         setLoading(false);
         return;
@@ -351,14 +375,15 @@ export function useEstatisticas() {
     }
 
     try {
-      const { total, semCito, outubroRosaRows: octRows, pendentesRows: pendRows, filterData: fd } = await fetchAllViewsShared();
+      const { total, semCito, outubroRosaRows: octRows, pendentesRows: pendRows, timelineRows: tlRows, filterData: fd } = await fetchAllViewsShared();
       if (isStale()) return;
       setTotalStats(total);
       setSemCitoStats(semCito);
       setOutubroRosaRows(octRows);
       setPendentesRows(pendRows);
+      setTimelineRows(tlRows);
       setFilterData(fd);
-      saveCache({ total, semCito, outubroRosaRows: octRows, pendentesRows: pendRows, filterData: fd, timestamp: Date.now() });
+      saveCache({ total, semCito, outubroRosaRows: octRows, pendentesRows: pendRows, timelineRows: tlRows, filterData: fd, timestamp: Date.now() });
     } catch (err) {
       if (isStale()) return;
       console.error("[useEstatisticas] Error:", err);
@@ -384,5 +409,5 @@ export function useEstatisticas() {
 
   const emptyFilter: FilterData = { unidades: [], equipes: {}, microareas: {}, totais: {} };
 
-  return { loading, error, getStats, outubroRosaRows, pendentesRows, filterData: filterData ?? emptyFilter, refetch: () => fetchData(true) };
+  return { loading, error, getStats, outubroRosaRows, pendentesRows, timelineRows, filterData: filterData ?? emptyFilter, refetch: () => fetchData(true) };
 }
