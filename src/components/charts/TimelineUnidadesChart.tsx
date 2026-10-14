@@ -210,15 +210,19 @@ function buildOption(
     animationEasing: "cubicOut" as const,
     tooltip: {
       trigger: "axis" as const,
+      // Confina dentro da área do gráfico: evita o tooltip "vazar" para fora do
+      // card no mobile (onde o container é estreito).
+      confine: true,
       // Translúcido de propósito: deixa o gráfico visível por trás do tooltip.
       backgroundColor: "rgba(26,39,68,0.62)",
       borderColor: "rgba(255,255,255,0.22)",
       borderWidth: 1,
-      padding: [8, 12],
+      padding: [6, 10],
       extraCssText:
         "backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);" +
-        "box-shadow:0 8px 24px rgba(2,6,23,0.30);border-radius:10px;",
-      textStyle: { color: "#fff", fontFamily: "Inter", fontSize: 12 },
+        "box-shadow:0 8px 24px rgba(2,6,23,0.30);border-radius:9px;" +
+        "max-width:min(72vw,250px);white-space:normal;line-height:1.28;word-break:break-word;",
+      textStyle: { color: "#fff", fontFamily: "Inter", fontSize: 11 },
       formatter: (params: Array<{ seriesName: string; seriesType: string; value: number; color: string; axisValue: string; dataIndex: number }>) => {
         if (!params?.length) return "";
         const idx = params[0]!.dataIndex;
@@ -235,24 +239,24 @@ function buildOption(
             const dim = hovered && !hoveringTotal && !isHl;
             const rowStyle = isHl
               ? `background:linear-gradient(90deg, ${p.color}3d, ${p.color}08);` +
-                `box-shadow:inset 3px 0 0 ${p.color};border-radius:5px;padding:2px 6px;margin:1px -2px;`
-              : "padding:2px 6px;margin:1px -2px;";
+                `box-shadow:inset 3px 0 0 ${p.color};border-radius:5px;padding:1px 5px;margin:1px -2px;`
+              : "padding:1px 5px;margin:1px -2px;";
             const valueStyle = isHl
-              ? `color:#fff;font-weight:800;font-size:13px;`
+              ? `color:#fff;font-weight:800;font-size:12px;`
               : "opacity:.92;";
             return `<div style="${rowStyle}${dim ? "opacity:.38;" : ""}">` +
-              `<span style="color:${p.color}">●</span> ${p.seriesName}: ` +
+              `<span style="color:${p.color}">●</span> ${shortName(p.seriesName, 15)}: ` +
               `<strong style="${valueStyle}">${fmt(Number(p.value))}</strong></div>`;
           })
           .join("");
-        const head = `<div style="font-weight:700;margin-bottom:4px">${params[0]!.axisValue}</div>`;
+        const head = `<div style="font-weight:700;margin-bottom:3px">${params[0]!.axisValue}</div>`;
         const accumStyle = hoveringTotal
           ? "background:linear-gradient(90deg, rgba(5,150,105,.35), transparent);box-shadow:inset 3px 0 0 #059669;border-radius:5px;padding:1px 6px;"
           : "";
         const foot =
-          `<div style="margin-top:5px;border-top:1px solid rgba(255,255,255,.18);padding-top:5px">` +
-          `Neste dia: <strong style="color:#6ee7b7">+${fmt(totalDaily[idx] ?? 0)}</strong> · ` +
-          `<span style="${accumStyle}">Acumulado: <strong>${fmt(totalCum[idx] ?? 0)}</strong></span></div>`;
+          `<div style="margin-top:4px;border-top:1px solid rgba(255,255,255,.18);padding-top:4px">` +
+          `Dia: <strong style="color:#6ee7b7">+${fmt(totalDaily[idx] ?? 0)}</strong> · ` +
+          `<span style="${accumStyle}">Acum: <strong>${fmt(totalCum[idx] ?? 0)}</strong></span></div>`;
         return `${head}${rows}${foot}`;
       },
     },
