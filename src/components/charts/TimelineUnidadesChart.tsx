@@ -77,8 +77,20 @@ function buildOption(
   const showBars = mode !== "accum";
   const showAccumLine = mode !== "daily";
   const bothAxes = mode === "both";
+  // Histórico longo (muitos pontos): evita poluir com rótulos em cada ponto.
+  const manyPoints = dates.length > 24;
 
-  const bars = units.map((u) => ({
+  // Índice da unidade que ocupa o TOPO do empilhado em cada dia. O rótulo do
+  // total do dia é ancorado nesse segmento (no próprio bar), que é a forma
+  // confiável do ECharts renderizar labels em barras empilhadas.
+  const topPerDay = dates.map((_, i) => {
+    for (let k = units.length - 1; k >= 0; k--) {
+      if ((units[k]!.daily[i] ?? 0) > 0) return k;
+    }
+    return -1;
+  });
+
+  const bars = units.map((u, i) => ({
     name: u.name,
     type: "bar" as const,
     stack: "dia",
@@ -86,6 +98,21 @@ function buildOption(
     data: u.daily,
     barMaxWidth: 26,
     itemStyle: { color: u.color, opacity: bothAxes ? 0.55 : 0.92, borderRadius: [2, 2, 0, 0] },
+    label: {
+      show: !manyPoints,
+      position: "top" as const,
+      distance: 3,
+      fontSize: 9.5,
+      fontWeight: "bold" as const,
+      fontFamily: "Inter",
+      color: "#475569",
+      textBorderColor: "#ffffff",
+      textBorderWidth: 2.5,
+      formatter: (p: { dataIndex: number; value: number }) =>
+        topPerDay[p.dataIndex] === i && Number(p.value) > 0
+          ? fmt(totalDaily[p.dataIndex] ?? 0)
+          : "",
+    },
     emphasis: { focus: "series" as const },
   }));
 
@@ -164,12 +191,16 @@ function buildOption(
             show: true,
             position: "top" as const,
             distance: 6,
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: "bold" as const,
             fontFamily: "Inter",
             color: TOTAL_COLOR,
+            textBorderColor: "#ffffff",
+            textBorderWidth: 2.5,
+            // Mostra o acumulado em TODOS os pontos; com histórico longo demais
+            // (dezenas de pontos) prioriza o último para não poluir.
             formatter: (p: { dataIndex: number; value: number }) =>
-              p.dataIndex === dates.length - 1 ? fmt(p.value) : "",
+              manyPoints && p.dataIndex !== dates.length - 1 ? "" : fmt(p.value),
           },
         },
       ]
@@ -232,7 +263,12 @@ function buildOption(
         // as barras (incremento do dia). Assim bar+linha não duplicam o mesmo valor.
         const wantType = mode === "accum" ? "line" : "bar";
         const rows = [...params]
-          .filter((p) => p.seriesName !== TOTAL_ACC && p.seriesType === wantType && Number(p.value) > 0)
+          .filter(
+            (p) =>
+              p.seriesName !== TOTAL_ACC &&
+              p.seriesType === wantType &&
+              Number(p.value) > 0,
+          )
           .sort((a, b) => Number(b.value) - Number(a.value))
           .map((p) => {
             const isHl = hovered === p.seriesName;
