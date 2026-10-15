@@ -105,7 +105,10 @@ function buildOption(
       fontSize: 9.5,
       fontWeight: "bold" as const,
       fontFamily: "Inter",
-      color: "#475569",
+      // Âmbar escuro: cor que NÃO existe nas paletas das barras (rosa/azul) nem
+      // na linha de acumulado (esmeralda) — sinaliza que é o TOTAL de todas as
+      // unidades daquele dia, não uma unidade isolada.
+      color: "#b45309",
       textBorderColor: "#ffffff",
       textBorderWidth: 2.5,
       formatter: (p: { dataIndex: number; value: number }) =>
