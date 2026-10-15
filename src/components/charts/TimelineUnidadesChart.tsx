@@ -463,8 +463,8 @@ export default function TimelineUnidadesChart({
     ? "from-blue-500 to-indigo-600 shadow-blue-200"
     : "from-rose-500 to-pink-600 shadow-rose-200";
   const btnCls = isNeutral
-    ? "border-slate-200 text-slate-600 hover:bg-slate-50"
-    : "border-rose-200 text-rose-600 hover:bg-rose-50";
+    ? "rounded-lg border-slate-200 text-slate-600 hover:bg-slate-50"
+    : "rounded-lg border-rose-200 text-rose-600 hover:bg-rose-50";
   const segWrap = isNeutral ? "border-slate-200 bg-slate-100/70" : "border-rose-200 bg-rose-50";
   const segActive = isNeutral ? "bg-blue-600 text-white shadow-sm" : "bg-rose-600 text-white shadow-sm";
   const segIdle = isNeutral ? "text-slate-500 hover:text-slate-800" : "text-rose-500 hover:text-rose-700";
@@ -509,14 +509,14 @@ export default function TimelineUnidadesChart({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className={`inline-flex items-center gap-0.5 rounded-lg border p-0.5 ${segWrap}`}>
+            <div className={`inline-flex h-9 items-center gap-0.5 rounded-lg border p-0.5 ${segWrap}`}>
               {MODES.map((m) => (
                 <button
                   key={m.key}
                   type="button"
                   title={m.hint}
                   onClick={() => setMode(m.key)}
-                  className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+                  className={`h-full rounded-md px-2.5 text-xs font-semibold transition-colors ${
                     mode === m.key ? segActive : segIdle
                   }`}
                 >
@@ -525,20 +525,25 @@ export default function TimelineUnidadesChart({
               ))}
             </div>
 
-            <div className="hidden items-end gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-1.5 sm:flex">
-              <div className="flex flex-col items-end leading-none">
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+            <div
+              className={`flex h-9 items-center gap-2 rounded-lg border px-2.5 sm:px-3 ${
+                isNeutral ? "border-slate-200 bg-white/70" : "border-rose-100 bg-white/70"
+              }`}
+            >
+              <div className="flex flex-col items-center leading-none">
+                <span className="flex h-3 items-center text-[9px] font-semibold uppercase tracking-wide text-slate-400">
                   Acumulado
                 </span>
-                <span className="text-lg font-extrabold tabular-nums text-emerald-600">
+                <span className="mt-0.5 flex h-5 items-center text-base font-extrabold tabular-nums text-emerald-600">
                   {fmt(totalFinal)}
                 </span>
               </div>
-              <div className="flex flex-col items-end border-l border-slate-200 pl-2 leading-none">
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+              <span className="w-px self-stretch bg-slate-200" aria-hidden="true" />
+              <div className="flex flex-col items-center leading-none">
+                <span className="flex h-3 items-center text-[9px] font-semibold uppercase tracking-wide text-slate-400">
                   Último dia
                 </span>
-                <span className="text-sm font-bold tabular-nums text-slate-600">
+                <span className="mt-0.5 flex h-5 items-center text-xs font-bold tabular-nums text-slate-600">
                   +{fmt(dailyTotal)}
                 </span>
               </div>
